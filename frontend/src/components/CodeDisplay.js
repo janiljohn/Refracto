@@ -22,7 +22,7 @@ const codeSample = `/*\n * Handler to avoid updating a "closed" incident\n */\n@
 
 const testSample = `/**\n * Test to ensure there is an Incident created by each Customer.\n * @throws Exception\n */\n@Test\n@WithMockUser(username = "alice")\nvoid expandEntityEndpoint() throws Exception {\n    mockMvc.perform(get(expandEntityURI))\n      .andExpect(jsonPath("$.value[0].incidents[0]").isMap())\n      .andExpect(jsonPath("$.value[0].incidents[0]").isNotEmpty());\n}`;
 
-const CodeDisplay = ({ ticket, onDelete, onUpdate }) => {
+const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [desc, setDesc] = useState(ticket.description);
   const [saving, setSaving] = useState(false);
@@ -44,7 +44,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate }) => {
           startIcon={<EditIcon />}
           size="small"
           variant="outlined"
-          onClick={handleEdit}
+          onClick={() => onEdit && onEdit(ticket)}
         >
           Edit Description
         </Button>
@@ -58,27 +58,6 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate }) => {
           Delete Ticket
         </Button>
       </Box>
-
-      {/* Edit Description Dialog */}
-      <Dialog open={editOpen} onClose={handleEditClose}>
-        <DialogTitle>Edit Description</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            multiline
-            minRows={3}
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleEditClose}>Cancel</Button>
-          <Button onClick={handleEditSave} disabled={saving} variant="contained">
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Code and Test Case Sections */}
       <Box>

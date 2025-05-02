@@ -20,18 +20,19 @@ import TicketList from '../components/TicketList';
 import CodeDisplay from '../components/CodeDisplay';
 import ChatPrompt from '../components/ChatPrompt';
 import CreateTicketModal from '../components/CreateTicketModal';
+import TicketForm from '../components/TicketForm';
 import { deleteTicket, updateTicket } from '../utils/api';
 
 const drawerWidth = 320;
 
 const TicketsPage = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [mode, setMode] = useState('view'); // 'view', 'create', 'edit'
   const [refreshTickets, setRefreshTickets] = useState(0);
   const [search, setSearch] = useState('');
 
   const handleTicketCreated = (ticket) => {
-    setIsCreateModalOpen(false);
+    setMode('view');
     setRefreshTickets((c) => c + 1);
     setSelectedTicket(ticket);
   };
@@ -47,7 +48,21 @@ const TicketsPage = () => {
   const handleUpdate = async (updatedTicket) => {
     await updateTicket(updatedTicket._id, { description: updatedTicket.description });
     setSelectedTicket((prev) => ({ ...prev, description: updatedTicket.description }));
+    setMode('view');
     setRefreshTickets((c) => c + 1);
+  };
+
+  const handleStartCreate = () => {
+    setSelectedTicket(null);
+    setMode('create');
+  };
+
+  const handleStartEdit = () => {
+    setMode('edit');
+  };
+
+  const handleCancel = () => {
+    setMode('view');
   };
 
   return (
@@ -109,7 +124,7 @@ const TicketsPage = () => {
               fullWidth
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={handleStartCreate}
               sx={{
                 borderRadius: 2,
                 textTransform: 'none',
@@ -124,9 +139,16 @@ const TicketsPage = () => {
         {/* Main Content */}
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
-            {selectedTicket ? (
-              <CodeDisplay ticket={selectedTicket} onDelete={handleDelete} onUpdate={handleUpdate} />
-            ) : (
+            {mode === 'create' && (
+              <TicketForm mode="create" onSubmit={handleTicketCreated} onCancel={handleCancel} />
+            )}
+            {mode === 'edit' && selectedTicket && (
+              <TicketForm mode="edit" ticket={selectedTicket} onSubmit={handleUpdate} onCancel={handleCancel} />
+            )}
+            {mode === 'view' && selectedTicket && (
+              <CodeDisplay ticket={selectedTicket} onDelete={handleDelete} onEdit={handleStartEdit} onUpdate={handleUpdate} />
+            )}
+            {mode === 'view' && !selectedTicket && (
               <Box
                 sx={{
                   height: '100%',
@@ -142,17 +164,12 @@ const TicketsPage = () => {
             )}
           </Box>
 
-          {selectedTicket && (
+          {mode === 'view' && selectedTicket && (
             <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
               <ChatPrompt ticketId={selectedTicket._id} />
             </Box>
           )}
         </Box>
-        <CreateTicketModal
-          open={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          onCreated={handleTicketCreated}
-        />
       </Box>
     </Box>
   );
