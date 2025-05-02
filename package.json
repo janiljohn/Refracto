@@ -1,0 +1,12 @@
+{
+  "name": "refracto-root",
+  "private": true,
+  "scripts": {
+    "client": "npm start --prefix frontend",
+    "server": "npm run dev --prefix backend",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
