@@ -20,4 +20,17 @@ export const updateTicket = async (id, data) => {
 export const deleteTicket = async (id) => {
   const res = await axios.delete(`${API_BASE}/tickets/${id}`);
   return res.data;
+};
+
+export const refineTicket = async (id, prompt) => {
+  const res = await fetch(`${API_BASE}/tickets/${id}/refine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: prompt
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Failed to refine code');
+  }
+  return res.json();
 }; 

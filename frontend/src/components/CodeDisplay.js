@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Box, Typography, Paper, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
-import { Check as CheckIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { useState, useEffect } from 'react';
+import { Box, Typography, Paper, Button, IconButton } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon } from '@mui/icons-material';
+import { getStatusColor } from '../utils/statusUtils';
 
 const GithubIcon = (props) => (
   <svg
@@ -26,6 +27,31 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [desc, setDesc] = useState(ticket.description);
   const [saving, setSaving] = useState(false);
+  const [currentTicket, setCurrentTicket] = useState(ticket);
+
+  useEffect(() => {
+    setCurrentTicket(ticket);
+  }, [ticket]);
+
+  // Poll for updates when status is in_progress
+  useEffect(() => {
+    let interval;
+    if (currentTicket.status === 'in_progress') {
+      interval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/tickets/${currentTicket._id}`);
+          const updatedTicket = await response.json();
+          setCurrentTicket(updatedTicket);
+          if (updatedTicket.status !== 'in_progress') {
+            clearInterval(interval);
+          }
+        } catch (error) {
+          console.error('Error polling ticket status:', error);
+        }
+      }, 2000); // Poll every 2 seconds
+    }
+    return () => clearInterval(interval);
+  }, [currentTicket._id, currentTicket.status]);
 
   const handleEdit = () => setEditOpen(true);
   const handleEditClose = () => setEditOpen(false);
@@ -38,6 +64,14 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {/* Status indicator */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <StatusIcon sx={{ color: getStatusColor(currentTicket.status) }} />
+        <Typography variant="subtitle1" color="text.secondary">
+          {currentTicket.status.charAt(0).toUpperCase() + currentTicket.status.slice(1)}
+        </Typography>
+      </Box>
+
       {/* Action buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
         <Button

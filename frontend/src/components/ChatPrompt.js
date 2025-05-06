@@ -1,58 +1,52 @@
 import { useState } from 'react';
-import { 
-  Box, 
-  TextField, 
-  IconButton,
-  Paper
-} from '@mui/material';
+import { Box, TextField, Button, CircularProgress } from '@mui/material';
 import { Send as SendIcon } from '@mui/icons-material';
+import { refineTicket } from '../utils/api';
 
-const ChatPrompt = ({ ticketId }) => {
+const ChatPrompt = ({ ticketId, onRefinementComplete }) => {
   const [prompt, setPrompt] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-    
-    // TODO: Send prompt to backend
-    console.log('Sending prompt:', prompt);
-    setPrompt('');
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await refineTicket(ticketId, prompt);
+      setPrompt('');
+      onRefinementComplete && onRefinementComplete();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Paper
-      component="form"
-      onSubmit={handleSubmit}
-      sx={{
-        p: 1,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2
-      }}
-    >
+    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', gap: 1 }}>
       <TextField
         fullWidth
-        placeholder="Ask for code refinements..."
+        size="small"
+        placeholder="Refine the code (e.g., 'Add error handling' or 'Optimize this function')"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
-        variant="standard"
-        InputProps={{
-          disableUnderline: true,
-          sx: { px: 1 }
-        }}
+        disabled={loading}
+        error={!!error}
+        helperText={error}
       />
-      <IconButton 
-        type="submit" 
-        color="primary"
-        disabled={!prompt.trim()}
+      <Button
+        type="submit"
+        variant="contained"
+        disabled={loading || !prompt.trim()}
+        startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
       >
-        <SendIcon />
-      </IconButton>
-    </Paper>
+        {loading ? 'Refining...' : 'Refine'}
+      </Button>
+    </Box>
   );
 };
 

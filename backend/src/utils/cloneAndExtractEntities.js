@@ -26,7 +26,6 @@ function scanForEntities(projectDir) {
       if (fs.statSync(fullPath).isDirectory()) {
         walk(fullPath);
       } else if (file.endsWith('.cds')) {
-        console.log(fs.statSync(fullPath));
         const content = fs.readFileSync(fullPath, 'utf-8');
         extractEntitiesFromCDS(content).forEach(e => entities.add(e));
       }
