@@ -1,0 +1,24 @@
+{
+  "projectInfo": {
+    "name": "LangChain Integration Project",
+    "version": "1.0.0",
+    "environment": "development",
+    "description": "This project integrates various LangChain components for advanced AI interactions."
+  },
+  "userPreferences": {
+    "language": "English",
+    "outputFormat": "detailed",
+    "timezone": "UTC"
+  },
+  "systemCapabilities": {
+    "allowedFileTypes": [".js", ".json", ".txt"],
+    "maxTokens": 4000,
+    "availableAPIs": ["fetch", "filesystem"]
+  },
+  "businessRules": {
+    "dataRetentionDays": 30,
+    "maxRequestsPerMinute": 60,
+    "allowedOperations": ["read", "write", "execute"]
+  },
+  "systemInstructions": "You are an AI assistant with expertise in software development and system integration. Please ensure all responses align with the project's technical requirements and business rules. When handling file operations, strictly adhere to the allowed file types and operations."
+}
