@@ -16,6 +16,7 @@ import {
   InputAdornment
 } from '@mui/material';
 import { Add as AddIcon, Menu as MenuIcon, Search as SearchIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import TicketList from '../components/TicketList';
 import CodeDisplay from '../components/CodeDisplay';
 import ChatPrompt from '../components/ChatPrompt';
@@ -30,6 +31,7 @@ const TicketsPage = () => {
   const [mode, setMode] = useState('view'); // 'view', 'create', 'edit'
   const [refreshTickets, setRefreshTickets] = useState(0);
   const [search, setSearch] = useState('');
+  const navigate = useNavigate();
 
   const handleTicketCreated = (ticket) => {
     setMode('view');
@@ -70,7 +72,13 @@ const TicketsPage = () => {
       {/* Header */}
       <AppBar position="static" elevation={1} sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', zIndex: 1201 }}>
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Typography variant="h5" fontWeight={700} color="primary" sx={{ letterSpacing: 1 }}>
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            color="primary"
+            sx={{ letterSpacing: 1, cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => navigate('/')}
+          >
             Refracto
           </Typography>
           <TextField

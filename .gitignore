@@ -33,3 +33,6 @@ coverage/
 # Local MongoDB data (optional)
 db/
 data/ 
+
+#imported repos
+/backend/src/repos/

@@ -1,11 +1,36 @@
 const mongoose = require('mongoose');
 
-const ticketSchema = new mongoose.Schema({
+const TicketSchema = new mongoose.Schema({
     title: {
         type: String,
         required: true
     },
-    description: {
+    intent: {
+        type: String,
+        required: true
+    },
+    cds: {
+        entities: {
+            type: [String],
+            default: []
+        }
+    },
+    trigger: {
+        type: String,
+        required: true
+    },
+    rules: {
+        type: [String],
+        default: []
+    },
+    output: {
+        type: String,
+        required: true
+    },
+    notes: {
+        type: String
+    },
+    githubUrl: {
         type: String,
         required: true
     },
@@ -13,10 +38,6 @@ const ticketSchema = new mongoose.Schema({
         type: String,
         enum: ['new', 'in_progress', 'completed', 'failed'],
         default: 'new'
-    },
-    githubUrl: {
-        type: String,
-        required: true
     },
     generatedCode: {
         type: String,
@@ -30,4 +51,4 @@ const ticketSchema = new mongoose.Schema({
     timestamps: true
 });
 
-module.exports = mongoose.model('Ticket', ticketSchema); 
+module.exports = mongoose.model('Ticket', TicketSchema); 

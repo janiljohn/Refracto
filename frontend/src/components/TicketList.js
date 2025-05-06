@@ -4,7 +4,8 @@ import {
   Typography,
   Card,
   CardActionArea,
-  CardContent
+  CardContent,
+  Chip
 } from '@mui/material';
 import { FiberManualRecord as StatusIcon } from '@mui/icons-material';
 import { getTickets } from '../utils/api';
@@ -60,20 +61,11 @@ const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
                 </Typography>
                 <StatusIcon sx={{ color: getStatusColor(ticket.status), fontSize: 18, ml: 1 }} />
               </Box>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  minHeight: 32
-                }}
-              >
-                {ticket.description}
-              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, minHeight: 24 }}>
+                {ticket.cds?.entities?.length > 0 && ticket.cds.entities.map(entity => (
+                  <Chip key={entity} label={entity} size="small" variant="outlined" />
+                ))}
+              </Box>
             </CardContent>
           </CardActionArea>
         </Card>

@@ -19,6 +19,7 @@ app.get('/', (req, res) => {
     res.send('API is running...');
 });
 app.use('/api/tickets', require('./routes/ticketRoutes'));
+app.use('/api/projects', require('./routes/projectRoutes'));
 
 const PORT = process.env.PORT || 5001;
 

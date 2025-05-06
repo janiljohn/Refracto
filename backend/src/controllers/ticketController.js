@@ -25,8 +25,8 @@ ticketController = {
   // Create ticket
   createTicket: async (req, res) => {
     try {
-      const { title, description, githubUrl } = req.body;
-      const ticket = new Ticket({ title, description, githubUrl });
+      console.log('Received body:', req.body);
+      const ticket = new Ticket(req.body);
       await ticket.save();
       res.status(201).json(ticket);
     } catch (err) {
