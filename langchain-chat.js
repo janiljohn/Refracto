@@ -68,7 +68,7 @@ async function setupAgent() {
       filesystem: {
         transport: "stdio",
         command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/C5395253/Desktop/tester/langchain"],
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/C5395253/Desktop/tester/langchain/backend/src/repos/f6515e32-ff8f-4d05-9cc9-226f39217337"],
       },
 
       graph: {
