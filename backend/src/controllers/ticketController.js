@@ -18,15 +18,37 @@ async function getOrCreateSession(ticketId) {
     throwOnLoadError: true,
     prefixToolNameWithServerName: true,
     additionalToolNamePrefix: "mcp",
+
     mcpServers: {
+      fetch: {
+        transport: "stdio",
+        command: "uvx",
+        args: ["mcp-server-fetch"],
+        restart: {
+          enabled: true,
+          maxAttempts: 3,
+          delayMs: 1000,
+        },
+      },
+
       filesystem: {
         transport: "stdio",
         command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/rohitjayakrishnan/Documents/Refracto2/backend/src/repos/c71d49ce-fc1a-4a46-be1b-a042b0bc2a87"],
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/C5395253/Desktop/tester/langchain/backend/src/repos/f6515e32-ff8f-4d05-9cc9-226f39217337"],
+      },
+      graph: {
+        transport: "stdio",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+      },
+      qdrant: {
+        transport: "stdio",
+        command: "uv",
+        // args: ["run", "/Users/C5395253/Desktop/Qdrant_docs/qdrant-docs/.venv/bin/qdrant-docs"]
+        args: ["run", "/path/to/binary"]
       }
-    }
+    },
   });
-
   const tools = await client.getTools();
   const model = new ChatAnthropic({
     modelName: "claude-3-5-sonnet-20240620",

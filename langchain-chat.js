@@ -70,11 +70,15 @@ async function setupAgent() {
         command: "npx",
         args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/C5395253/Desktop/tester/langchain/backend/src/repos/f6515e32-ff8f-4d05-9cc9-226f39217337"],
       },
-
       graph: {
         transport: "stdio",
         command: "npx",
         args: ["-y", "@modelcontextprotocol/server-memory"],
+      },
+      qdrant: {
+        transport: "stdio",
+        command: "uv",
+        args: ["run", "/Users/C5395253/Desktop/Qdrant_docs/qdrant-docs/.venv/bin/qdrant-docs"]
       }
     },
   });
