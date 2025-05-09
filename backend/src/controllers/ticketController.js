@@ -123,7 +123,7 @@ async function generateCode(ticketId) {
     const ticket = await Ticket.findById(ticketId);
 
     // Generate code using the ticket details and context
-    const response = await session.agent.invoke({
+    const codeResponse = await session.agent.invoke({
       messages: [
         ...session.conversationHistory,
         {
@@ -141,19 +141,38 @@ async function generateCode(ticketId) {
     });
 
     // Store conversation history
-    session.conversationHistory = response.messages;
+    session.conversationHistory = codeResponse.messages;
+
+    // Generate test cases using the same session
+    const testResponse = await session.agent.invoke({
+      messages: [
+        ...session.conversationHistory,
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "Generate test cases for the following code:",
+            code: codeResponse.messages[codeResponse.messages.length - 1].content,
+            globalContext: GLOBAL_CONTEXT
+          })
+        }
+      ]
+    });
+
+    // Update conversation history with test generation
+    session.conversationHistory = testResponse.messages;
 
     await Ticket.findByIdAndUpdate(ticketId, {
       status: 'completed',
-      generatedCode: response.messages[response.messages.length - 1].content,
-      testCases: '// Test cases will be generated in a separate step'
+      generatedCode: codeResponse.messages[codeResponse.messages.length - 1].content,
+      testCases: testResponse.messages[testResponse.messages.length - 1].content
     });
 
   } catch (error) {
     console.error('Code generation failed:', error);
     await Ticket.findByIdAndUpdate(ticketId, { 
       status: 'failed',
-      generatedCode: `// Error: ${error.message}`
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`
     });
   }
 }

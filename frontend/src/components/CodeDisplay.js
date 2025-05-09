@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Button, IconButton } from '@mui/material';
+import { Box, Typography, Paper, Button, IconButton, CircularProgress } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon } from '@mui/icons-material';
 import { getStatusColor } from '../utils/statusUtils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -42,16 +42,16 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     setTestEdit(ticket.testCases || testSample);
   }, [ticket]);
 
-  // Poll for updates when status is in_progress
+  // Poll for updates when status is pending or in_progress
   useEffect(() => {
     let interval;
-    if (currentTicket.status === 'in_progress') {
+    if (currentTicket.status === 'pending' || currentTicket.status === 'in_progress' || currentTicket.status === 'new') {
       interval = setInterval(async () => {
         try {
           const response = await fetch(`/api/tickets/${currentTicket._id}`);
           const updatedTicket = await response.json();
           setCurrentTicket(updatedTicket);
-          if (updatedTicket.status !== 'in_progress') {
+          if (updatedTicket.status !== 'pending' && updatedTicket.status !== 'in_progress' && updatedTicket.status !== 'new') {
             clearInterval(interval);
           }
         } catch (error) {
@@ -71,7 +71,32 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     setEditOpen(false);
   };
 
-  return (
+  const renderLoadingState = () => (
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      height: '100%',
+      gap: 2,
+      p: 4
+    }}>
+      <CircularProgress size={60} thickness={4} />
+      <Typography variant="h6" color="text.secondary">
+        Agent is working...
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, textAlign: 'center' }}>
+        Please wait while our AI agent processes your request. This may take a few moments.
+      </Typography>
+    </Box>
+  );
+
+  // If ticket is pending, in progress, or new, show loading state
+  if (currentTicket.status === 'pending' || currentTicket.status === 'in_progress' || currentTicket.status === 'new') {
+    return renderLoadingState();
+  }
+
+  const renderContent = () => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {/* Status indicator and Action buttons */}
       <Box sx={{ 
@@ -289,6 +314,8 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
       </Box>
     </Box>
   );
+
+  return renderContent();
 };
 
 export default CodeDisplay; 
