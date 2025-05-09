@@ -2,9 +2,55 @@ const Ticket = require('../models/Ticket');
 const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
 const { ChatAnthropic } = require("@langchain/anthropic");
 const { createReactAgent } = require("@langchain/langgraph/prebuilt");
+const fs = require('fs').promises;
+const path = require('path');
 
 // Store active sessions
 const activeSessions = new Map();
+
+// Global context management
+let GLOBAL_CONTEXT = null;
+
+// Function to load context from file
+async function loadContext(contextFilePath) {
+  try {
+    const fileContent = await fs.readFile(contextFilePath, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (error) {
+    console.error('Error loading context file:', error.message);
+    console.log('Using default context instead.');
+    return {
+      projectInfo: {
+        name: "Default Project",
+        version: "1.0.0",
+        environment: "development"
+      },
+      systemInstructions: "You are an AI assistant. Please help the user with their queries."
+    };
+  }
+}
+
+// Function to generate system message from context
+function generateSystemMessage(context) {
+  if (context.systemInstructions) {
+    return context.systemInstructions + '\n\nProject Context:\n' +
+           JSON.stringify(context, null, 2);
+  }
+  return `You are an AI assistant with access to the following context:
+${JSON.stringify(context, null, 2)}
+
+Please use this context when providing assistance and ensure all operations comply with any specified rules.`;
+}
+
+// Initialize global context
+async function initializeGlobalContext() {
+  const contextPath = path.join(process.cwd(), 'agent-context.json');
+  GLOBAL_CONTEXT = await loadContext(contextPath);
+  console.log('Global context initialized from:', contextPath);
+}
+
+// Call initialization
+initializeGlobalContext().catch(console.error);
 
 async function getOrCreateSession(ticketId) {
   if (activeSessions.has(ticketId)) {
@@ -44,7 +90,6 @@ async function getOrCreateSession(ticketId) {
       qdrant: {
         transport: "stdio",
         command: "uv",
-        // args: ["run", "/Users/C5395253/Desktop/Qdrant_docs/qdrant-docs/.venv/bin/qdrant-docs"]
         args: ["run", process.env.QDRANT_BIN]
       }
     },
@@ -60,7 +105,13 @@ async function getOrCreateSession(ticketId) {
     tools,
   });
 
-  const session = { agent, client, conversationHistory: [] };
+  // Initialize conversation history with system message
+  const systemMessage = generateSystemMessage(GLOBAL_CONTEXT);
+  const session = { 
+    agent, 
+    client, 
+    conversationHistory: [{ role: "system", content: systemMessage }] 
+  };
   activeSessions.set(ticketId, session);
   return session;
 }
@@ -71,18 +122,22 @@ async function generateCode(ticketId) {
     const session = await getOrCreateSession(ticketId);
     const ticket = await Ticket.findById(ticketId);
 
-    // Generate code using the ticket details
+    // Generate code using the ticket details and context
     const response = await session.agent.invoke({
-      messages: [{
-        role: "user",
-        content: JSON.stringify({
-          intent: ticket.intent,
-          trigger: ticket.trigger,
-          rules: ticket.rules,
-          output: ticket.output,
-          notes: ticket.notes
-        })
-      }]
+      messages: [
+        ...session.conversationHistory,
+        {
+          role: "user",
+          content: JSON.stringify({
+            intent: ticket.intent,
+            trigger: ticket.trigger,
+            rules: ticket.rules,
+            output: ticket.output,
+            notes: ticket.notes,
+            globalContext: GLOBAL_CONTEXT
+          })
+        }
+      ]
     });
 
     // Store conversation history
@@ -115,7 +170,10 @@ async function refineCode(ticketId, prompt) {
         ...session.conversationHistory,
         {
           role: "user",
-          content: prompt
+          content: JSON.stringify({
+            prompt,
+            globalContext: GLOBAL_CONTEXT
+          })
         }
       ]
     });

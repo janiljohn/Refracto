@@ -1,9 +1,9 @@
 {
   "projectInfo": {
-    "name": "LangChain Integration Project",
+    "name": "Refracto AI agent",
     "version": "1.0.0",
     "environment": "development",
-    "description": "This project integrates various LangChain components for advanced AI interactions."
+    "description": "AI agent for SAP CAP Java development"
   },
   "userPreferences": {
     "language": "English",
@@ -11,9 +11,9 @@
     "timezone": "UTC"
   },
   "systemCapabilities": {
-    "allowedFileTypes": [".js", ".json", ".txt"],
+    "allowedFileTypes": [".js", ".json", ".txt", ".java", ".xml", ".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".md", ".yml", ".yaml", ".toml", ".ini", ".conf", ".env", ".lock", ".lockb", ".lock.json", ".lock.yaml", ".lock.toml", ".lock.ini", ".lock.conf", ".lock.env", ".lock.lock", ".lock.lockb", ".lock.lock.json", ".lock.lock.yaml", ".lock.lock.toml", ".lock.lock.ini", ".lock.lock.conf", ".lock.lock.env", ".cds"],
     "maxTokens": 4000,
-    "availableAPIs": ["fetch", "filesystem"]
+    "availableAPIs": ["fetch", "filesystem", "qdrant", "graph"]
   },
   "businessRules": {
     "dataRetentionDays": 30,
