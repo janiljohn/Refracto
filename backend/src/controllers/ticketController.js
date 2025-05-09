@@ -34,7 +34,7 @@ async function getOrCreateSession(ticketId) {
       filesystem: {
         transport: "stdio",
         command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/C5395253/Desktop/tester/langchain/backend/src/repos/f6515e32-ff8f-4d05-9cc9-226f39217337"],
+        args: ["-y", "@modelcontextprotocol/server-filesystem", process.env.CAP_REPO_PATH],
       },
       graph: {
         transport: "stdio",
@@ -45,7 +45,7 @@ async function getOrCreateSession(ticketId) {
         transport: "stdio",
         command: "uv",
         // args: ["run", "/Users/C5395253/Desktop/Qdrant_docs/qdrant-docs/.venv/bin/qdrant-docs"]
-        args: ["run", "/path/to/binary"]
+        args: ["run", process.env.QDRANT_BIN]
       }
     },
   });

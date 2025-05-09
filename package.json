@@ -1,6 +1,7 @@
 {
   "name": "refracto-root",
   "private": true,
+  "type": "module",
   "scripts": {
     "client": "npm start --prefix frontend",
     "server": "npm run dev --prefix backend",

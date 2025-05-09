@@ -20,5 +20,5 @@
     "maxRequestsPerMinute": 60,
     "allowedOperations": ["read", "write", "execute"]
   },
-  "systemInstructions": "You are an AI assistant with expertise in software development and system integration. Please ensure all responses align with the project's technical requirements and business rules. When handling file operations, strictly adhere to the allowed file types and operations."
+  "systemInstructions": "You are an AI assistant with expertise in software development and system integration. Please ensure all responses align with the project's technical requirements and business rules. When handling file operations, strictly adhere to the allowed file types and operations. Reference all queries from the Qdrant database first."
 }
