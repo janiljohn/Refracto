@@ -25,6 +25,38 @@ const getStatusColor = (status) => {
   }
 };
 
+const getEntityColor = (entity) => {
+  const colors = [
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#14b8a6', // teal
+    '#f97316', // orange
+    '#06b6d4', // cyan
+    '#a855f7', // violet
+    '#10b981', // emerald
+    '#f59e0b', // amber
+    '#6366f1', // indigo
+    '#ef4444', // red
+    '#84cc16', // lime
+    '#0ea5e9', // sky
+    '#d946ef', // fuchsia
+    '#22c55e', // green
+    '#f43f5e', // rose
+    '#06b6d4', // cyan
+    '#8f3cf7', // purple
+    '#e879f9', // pink
+    '#2dd4bf', // teal
+    '#fb923c', // orange
+  ];
+  
+  // Improved hash function for better distribution
+  const hash = entity.split('').reduce((acc, char, index) => {
+    return acc + (char.charCodeAt(0) * (index + 1));
+  }, 0);
+  
+  return colors[Math.abs(hash) % colors.length];
+};
+
 const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
   const [tickets, setTickets] = useState([]);
 
@@ -33,7 +65,10 @@ const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
   }, [refresh]);
 
   const filtered = search
-    ? tickets.filter(t => t.title.toLowerCase().includes(search.toLowerCase()))
+    ? tickets.filter(t =>
+        t.title.toLowerCase().includes(search.toLowerCase()) ||
+        (t.cds?.entities || []).some(entity => entity.toLowerCase().includes(search.toLowerCase()))
+      )
     : tickets;
 
   return (
@@ -63,7 +98,19 @@ const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, minHeight: 24 }}>
                 {ticket.cds?.entities?.length > 0 && ticket.cds.entities.map(entity => (
-                  <Chip key={entity} label={entity} size="small" variant="outlined" />
+                  <Chip 
+                    key={entity} 
+                    label={entity} 
+                    size="small" 
+                    sx={{
+                      backgroundColor: `${getEntityColor(entity)}15`,
+                      borderColor: getEntityColor(entity),
+                      color: getEntityColor(entity),
+                      '&:hover': {
+                        backgroundColor: `${getEntityColor(entity)}25`,
+                      }
+                    }}
+                  />
                 ))}
               </Box>
             </CardContent>

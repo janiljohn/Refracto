@@ -72,18 +72,20 @@ const TicketsPage = () => {
       {/* Header */}
       <AppBar position="static" elevation={1} sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', zIndex: 1201 }}>
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Typography
-            variant="h5"
-            fontWeight={700}
-            color="primary"
-            sx={{ letterSpacing: 1, cursor: 'pointer', userSelect: 'none' }}
-            onClick={() => navigate('/')}
-          >
-            Refracto
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none' }} onClick={() => navigate('/')}> 
+            <img src="/ricon.png" alt="Logo" style={{ height: 32, width: 32, marginRight: 8 }} />
+            <Typography
+              variant="h5"
+              fontWeight={700}
+              color="primary"
+              sx={{ letterSpacing: 1 }}
+            >
+              Refracto
+            </Typography>
+          </Box>
           <TextField
             size="small"
-            placeholder="Search tickets..."
+            placeholder="Search tickets or entities..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             sx={{ width: 320 }}

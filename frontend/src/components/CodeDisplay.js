@@ -1,6 +1,10 @@
-import { useState } from 'react';
-import { Box, Typography, Paper, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
-import { Check as CheckIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { useState, useEffect } from 'react';
+import { Box, Typography, Paper, Button, IconButton } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon } from '@mui/icons-material';
+import { getStatusColor } from '../utils/statusUtils';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import MonacoEditor from '@monaco-editor/react';
 
 const GithubIcon = (props) => (
   <svg
@@ -26,6 +30,37 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [desc, setDesc] = useState(ticket.description);
   const [saving, setSaving] = useState(false);
+  const [currentTicket, setCurrentTicket] = useState(ticket);
+  const [codeEdit, setCodeEdit] = useState(ticket.generatedCode || codeSample);
+  const [testEdit, setTestEdit] = useState(ticket.testCases || testSample);
+  const [editingCode, setEditingCode] = useState(false);
+  const [editingTest, setEditingTest] = useState(false);
+
+  useEffect(() => {
+    setCurrentTicket(ticket);
+    setCodeEdit(ticket.generatedCode || codeSample);
+    setTestEdit(ticket.testCases || testSample);
+  }, [ticket]);
+
+  // Poll for updates when status is in_progress
+  useEffect(() => {
+    let interval;
+    if (currentTicket.status === 'in_progress') {
+      interval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/tickets/${currentTicket._id}`);
+          const updatedTicket = await response.json();
+          setCurrentTicket(updatedTicket);
+          if (updatedTicket.status !== 'in_progress') {
+            clearInterval(interval);
+          }
+        } catch (error) {
+          console.error('Error polling ticket status:', error);
+        }
+      }, 2000); // Poll every 2 seconds
+    }
+    return () => clearInterval(interval);
+  }, [currentTicket._id, currentTicket.status]);
 
   const handleEdit = () => setEditOpen(true);
   const handleEditClose = () => setEditOpen(false);
@@ -38,25 +73,50 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {/* Action buttons */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-        <Button
-          startIcon={<EditIcon />}
-          size="small"
-          variant="outlined"
-          onClick={() => onEdit && onEdit(ticket)}
-        >
-          Edit Description
-        </Button>
-        <Button
-          startIcon={<DeleteIcon />}
-          size="small"
-          color="error"
-          variant="outlined"
-          onClick={() => onDelete && onDelete(ticket)}
-        >
-          Delete Ticket
-        </Button>
+      {/* Status indicator and Action buttons */}
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        mb: 3,
+        '& .status-badge': {
+          px: 2,
+          py: 0.5,
+          borderRadius: 10,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 1,
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          textTransform: 'capitalize',
+          backgroundColor: `${getStatusColor(currentTicket.status)}15`,
+          color: getStatusColor(currentTicket.status),
+          border: `1px solid ${getStatusColor(currentTicket.status)}40`,
+        }
+      }}>
+        <Box className="status-badge">
+          <StatusIcon sx={{ fontSize: 16 }} />
+          {currentTicket.status.replace('_', ' ')}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            startIcon={<EditIcon />}
+            size="small"
+            variant="outlined"
+            onClick={() => onEdit && onEdit(ticket)}
+          >
+            Edit Description
+          </Button>
+          <Button
+            startIcon={<DeleteIcon />}
+            size="small"
+            color="error"
+            variant="outlined"
+            onClick={() => onDelete && onDelete(ticket)}
+          >
+            Delete Ticket
+          </Button>
+        </Box>
       </Box>
 
       {/* Code and Test Case Sections */}
@@ -66,16 +126,74 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
         </Typography>
         <Paper
           sx={{
-            p: 2,
-            bgcolor: '#181c23',
-            color: '#fff',
-            fontFamily: 'monospace',
-            fontSize: '1rem',
+            p: 0,
+            bgcolor: '#1e1e1e',
+            color: '#d4d4d4',
+            fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontSize: '0.95rem',
             overflowX: 'auto',
             mb: 2,
+            border: '1px solid #333',
+            borderRadius: 2,
+            boxShadow: 'none',
+            position: 'relative',
           }}
         >
-          <pre style={{ margin: 0 }}>{ticket.generatedCode || codeSample}</pre>
+          {editingCode ? (
+            <Box>
+              <MonacoEditor
+                height="300px"
+                defaultLanguage="java"
+                theme="vs-dark"
+                value={codeEdit}
+                onChange={v => setCodeEdit(v)}
+                options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false }}
+              />
+              <Box sx={{ display: 'flex', gap: 1, p: 1, justifyContent: 'flex-end', bgcolor: '#23272e' }}>
+                <Button
+                  startIcon={<SaveIcon />}
+                  variant="contained"
+                  size="small"
+                  onClick={() => { setEditingCode(false); onUpdate && onUpdate({ ...ticket, generatedCode: codeEdit }); }}
+                  sx={{ bgcolor: '#388e3c', color: '#fff', '&:hover': { bgcolor: '#256029' } }}
+                >
+                  Save
+                </Button>
+                <Button
+                  startIcon={<CancelIcon />}
+                  variant="outlined"
+                  size="small"
+                  onClick={() => { setEditingCode(false); setCodeEdit(ticket.generatedCode || codeSample); }}
+                  sx={{ color: '#fff', borderColor: '#888' }}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Box>
+              <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setEditingCode(true)}
+                  startIcon={<EditIcon />}
+                  sx={{ color: '#fff', borderColor: '#888', background: 'rgba(30,30,30,0.85)' }}
+                >
+                  Edit
+                </Button>
+              </Box>
+              <SyntaxHighlighter
+                language="java"
+                style={darkTheme}
+                showLineNumbers
+                customStyle={{ margin: 0, background: 'none', fontSize: '0.95rem', borderRadius: 0 }}
+                lineNumberStyle={{ minWidth: 32, color: '#858585', background: '#23272e', borderRight: '1px solid #222', padding: '0 8px' }}
+              >
+                {codeEdit}
+              </SyntaxHighlighter>
+            </Box>
+          )}
         </Paper>
       </Box>
       <Box>
@@ -84,15 +202,73 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
         </Typography>
         <Paper
           sx={{
-            p: 2,
-            bgcolor: '#181c23',
-            color: '#fff',
-            fontFamily: 'monospace',
-            fontSize: '1rem',
+            p: 0,
+            bgcolor: '#1e1e1e',
+            color: '#d4d4d4',
+            fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontSize: '0.95rem',
             overflowX: 'auto',
+            border: '1px solid #333',
+            borderRadius: 2,
+            boxShadow: 'none',
+            position: 'relative',
           }}
         >
-          <pre style={{ margin: 0 }}>{ticket.testCases || testSample}</pre>
+          {editingTest ? (
+            <Box>
+              <MonacoEditor
+                height="300px"
+                defaultLanguage="java"
+                theme="vs-dark"
+                value={testEdit}
+                onChange={v => setTestEdit(v)}
+                options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false }}
+              />
+              <Box sx={{ display: 'flex', gap: 1, p: 1, justifyContent: 'flex-end', bgcolor: '#23272e' }}>
+                <Button
+                  startIcon={<SaveIcon />}
+                  variant="contained"
+                  size="small"
+                  onClick={() => { setEditingTest(false); onUpdate && onUpdate({ ...ticket, testCases: testEdit }); }}
+                  sx={{ bgcolor: '#388e3c', color: '#fff', '&:hover': { bgcolor: '#256029' } }}
+                >
+                  Save
+                </Button>
+                <Button
+                  startIcon={<CancelIcon />}
+                  variant="outlined"
+                  size="small"
+                  onClick={() => { setEditingTest(false); setTestEdit(ticket.testCases || testSample); }}
+                  sx={{ color: '#fff', borderColor: '#888' }}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Box>
+              <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setEditingTest(true)}
+                  startIcon={<EditIcon />}
+                  sx={{ color: '#fff', borderColor: '#888', background: 'rgba(30,30,30,0.85)' }}
+                >
+                  Edit
+                </Button>
+              </Box>
+              <SyntaxHighlighter
+                language="java"
+                style={darkTheme}
+                showLineNumbers
+                customStyle={{ margin: 0, background: 'none', fontSize: '0.95rem', borderRadius: 0 }}
+                lineNumberStyle={{ minWidth: 32, color: '#858585', background: '#23272e', borderRight: '1px solid #222', padding: '0 8px' }}
+              >
+                {testEdit}
+              </SyntaxHighlighter>
+            </Box>
+          )}
         </Paper>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>

@@ -1,0 +1,24 @@
+{
+  "projectInfo": {
+    "name": "Refracto AI agent",
+    "version": "1.0.0",
+    "environment": "development",
+    "description": "AI agent for SAP CAP Java development"
+  },
+  "userPreferences": {
+    "language": "English",
+    "outputFormat": "detailed",
+    "timezone": "UTC"
+  },
+  "systemCapabilities": {
+    "allowedFileTypes": [".js", ".json", ".txt", ".java", ".xml", ".html", ".css", ".js", ".jsx", ".ts", ".tsx", ".md", ".yml", ".yaml", ".toml", ".ini", ".conf", ".env", ".lock", ".lockb", ".lock.json", ".lock.yaml", ".lock.toml", ".lock.ini", ".lock.conf", ".lock.env", ".lock.lock", ".lock.lockb", ".lock.lock.json", ".lock.lock.yaml", ".lock.lock.toml", ".lock.lock.ini", ".lock.lock.conf", ".lock.lock.env", ".cds"],
+    "maxTokens": 4000,
+    "availableAPIs": ["fetch", "filesystem", "qdrant", "graph"]
+  },
+  "businessRules": {
+    "dataRetentionDays": 30,
+    "maxRequestsPerMinute": 60,
+    "allowedOperations": ["read", "write", "execute"]
+  },
+  "systemInstructions": "You are an AI assistant with expertise in software development and system integration. Please ensure all responses align with the project's technical requirements and business rules. When handling file operations, strictly adhere to the allowed file types and operations. Reference all queries from the Qdrant database first."
+}
