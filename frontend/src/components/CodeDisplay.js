@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Button, IconButton, CircularProgress } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon } from '@mui/icons-material';
+import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon } from '@mui/icons-material';
 import { getStatusColor } from '../utils/statusUtils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -28,6 +28,7 @@ const testSample = `/**\n * Test to ensure there is an Incident created by each 
 
 const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
   const [editOpen, setEditOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [desc, setDesc] = useState(ticket.description);
   const [saving, setSaving] = useState(false);
   const [currentTicket, setCurrentTicket] = useState(ticket);
@@ -96,6 +97,141 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     return renderLoadingState();
   }
 
+  const renderReasoning = () => {
+    if (!currentTicket.agentReasoning) return null;
+
+    return (
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <span role="img" aria-label="brain">🧠</span> Agent Reasoning:
+        </Typography>
+        <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4' }}>
+          {currentTicket.agentReasoning.codeGeneration && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+                Code Generation Reasoning:
+              </Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                {currentTicket.agentReasoning.codeGeneration}
+              </Typography>
+            </Box>
+          )}
+          {currentTicket.agentReasoning.testGeneration && (
+            <Box>
+              <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+                Test Generation Reasoning:
+              </Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                {currentTicket.agentReasoning.testGeneration}
+              </Typography>
+            </Box>
+          )}
+          {currentTicket.agentReasoning.error && (
+            <Box sx={{ color: 'error.main' }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Error:
+              </Typography>
+              <Typography variant="body2">
+                {currentTicket.agentReasoning.error}
+              </Typography>
+            </Box>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+            Generated at: {new Date(currentTicket.agentReasoning.timestamp).toLocaleString()}
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  };
+
+  const renderTerminal = () => {
+    if (!currentTicket.agentReasoning) return null;
+
+    return (
+      <Modal
+        open={terminalOpen}
+        onClose={() => setTerminalOpen(false)}
+        closeAfterTransition
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 2
+        }}
+      >
+        <Fade in={terminalOpen}>
+          <Paper sx={{
+            width: '90%',
+            maxWidth: 800,
+            maxHeight: '80vh',
+            bgcolor: '#1e1e1e',
+            color: '#00ff00',
+            p: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Terminal Header */}
+            <Box sx={{
+              bgcolor: '#2d2d2d',
+              p: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid #3d3d3d'
+            }}>
+              <Typography variant="subtitle2" sx={{ color: '#fff', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TerminalIcon sx={{ fontSize: 16 }} />
+                Agent Logs
+              </Typography>
+              <IconButton size="small" onClick={() => setTerminalOpen(false)} sx={{ color: '#fff' }}>
+                <CancelIcon fontSize="small" />
+              </IconButton>
+            </Box>
+
+            {/* Terminal Content */}
+            <Box sx={{
+              p: 2,
+              overflowY: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
+              '& pre': { margin: 0 }
+            }}>
+              {currentTicket.agentReasoning.codeGeneration && (
+                <>
+                  <Typography sx={{ color: '#00ff00', mb: 1 }}>=== Code Generation Logs ===</Typography>
+                  <pre style={{ color: '#fff', whiteSpace: 'pre-wrap' }}>
+                    {currentTicket.agentReasoning.codeGeneration}
+                  </pre>
+                </>
+              )}
+              {currentTicket.agentReasoning.testGeneration && (
+                <>
+                  <Typography sx={{ color: '#00ff00', mt: 2, mb: 1 }}>=== Test Generation Logs ===</Typography>
+                  <pre style={{ color: '#fff', whiteSpace: 'pre-wrap' }}>
+                    {currentTicket.agentReasoning.testGeneration}
+                  </pre>
+                </>
+              )}
+              {currentTicket.agentReasoning.error && (
+                <>
+                  <Typography sx={{ color: '#ff4444', mt: 2, mb: 1 }}>=== Error Logs ===</Typography>
+                  <pre style={{ color: '#ff4444', whiteSpace: 'pre-wrap' }}>
+                    {currentTicket.agentReasoning.error}
+                  </pre>
+                </>
+              )}
+              <Typography sx={{ color: '#888', mt: 2, fontSize: '0.8rem' }}>
+                Generated at: {new Date(currentTicket.agentReasoning.timestamp).toLocaleString()}
+              </Typography>
+            </Box>
+          </Paper>
+        </Fade>
+      </Modal>
+    );
+  };
+
   const renderContent = () => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {/* Status indicator and Action buttons */}
@@ -124,6 +260,17 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
           {currentTicket.status.replace('_', ' ')}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          {currentTicket.agentReasoning && (
+            <Button
+              startIcon={<TerminalIcon />}
+              size="small"
+              variant="outlined"
+              onClick={() => setTerminalOpen(true)}
+              sx={{ color: '#00ff00', borderColor: '#00ff00', '&:hover': { borderColor: '#00ff00', bgcolor: 'rgba(0,255,0,0.1)' } }}
+            >
+              View Logs
+            </Button>
+          )}
           <Button
             startIcon={<EditIcon />}
             size="small"
@@ -296,6 +443,10 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
           )}
         </Paper>
       </Box>
+      
+      {/* Add reasoning section before the Approve button */}
+      {renderReasoning()}
+      
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
         <Button
           variant="contained"
@@ -312,6 +463,8 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
           Approve & Apply
         </Button>
       </Box>
+
+      {renderTerminal()}
     </Box>
   );
 

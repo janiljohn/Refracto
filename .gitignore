@@ -35,4 +35,4 @@ db/
 data/ 
 
 #imported repos
-/backend/src/repos/
+backend/src/repos/

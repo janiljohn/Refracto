@@ -1,56 +1,11 @@
 const Ticket = require('../models/Ticket');
-const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
-const { ChatAnthropic } = require("@langchain/anthropic");
-const { createReactAgent } = require("@langchain/langgraph/prebuilt");
-const fs = require('fs').promises;
-const path = require('path');
+const axios = require('axios');
+
+const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://localhost:8080';
 
 // Store active sessions
 const activeSessions = new Map();
 
-// Global context management
-let GLOBAL_CONTEXT = null;
-
-// Function to load context from file
-async function loadContext(contextFilePath) {
-  try {
-    const fileContent = await fs.readFile(contextFilePath, 'utf8');
-    return JSON.parse(fileContent);
-  } catch (error) {
-    console.error('Error loading context file:', error.message);
-    console.log('Using default context instead.');
-    return {
-      projectInfo: {
-        name: "Default Project",
-        version: "1.0.0",
-        environment: "development"
-      },
-      systemInstructions: "You are an AI assistant. Please help the user with their queries."
-    };
-  }
-}
-
-// Function to generate system message from context
-function generateSystemMessage(context) {
-  if (context.systemInstructions) {
-    return context.systemInstructions + '\n\nProject Context:\n' +
-           JSON.stringify(context, null, 2);
-  }
-  return `You are an AI assistant with access to the following context:
-${JSON.stringify(context, null, 2)}
-
-Please use this context when providing assistance and ensure all operations comply with any specified rules.`;
-}
-
-// Initialize global context
-async function initializeGlobalContext() {
-  const contextPath = path.join(process.cwd(), 'agent-context.json');
-  GLOBAL_CONTEXT = await loadContext(contextPath);
-  console.log('Global context initialized from:', contextPath);
-}
-
-// Call initialization
-initializeGlobalContext().catch(console.error);
 
 async function getOrCreateSession(ticketId) {
   if (activeSessions.has(ticketId)) {
@@ -60,58 +15,7 @@ async function getOrCreateSession(ticketId) {
   const ticket = await Ticket.findById(ticketId);
   if (!ticket) throw new Error('Ticket not found');
 
-  const client = new MultiServerMCPClient({
-    throwOnLoadError: true,
-    prefixToolNameWithServerName: true,
-    additionalToolNamePrefix: "mcp",
-
-    mcpServers: {
-      fetch: {
-        transport: "stdio",
-        command: "uvx",
-        args: ["mcp-server-fetch"],
-        restart: {
-          enabled: true,
-          maxAttempts: 3,
-          delayMs: 1000,
-        },
-      },
-
-      filesystem: {
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", process.env.CAP_REPO_PATH],
-      },
-      graph: {
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-memory"],
-      },
-      qdrant: {
-        transport: "stdio",
-        command: "uv",
-        args: ["run", process.env.QDRANT_BIN]
-      }
-    },
-  });
-  const tools = await client.getTools();
-  const model = new ChatAnthropic({
-    modelName: "claude-3-5-sonnet-20240620",
-    temperature: 0,
-  });
-
-  const agent = createReactAgent({
-    llm: model,
-    tools,
-  });
-
-  // Initialize conversation history with system message
-  const systemMessage = generateSystemMessage(GLOBAL_CONTEXT);
-  const session = { 
-    agent, 
-    client, 
-    conversationHistory: [{ role: "system", content: systemMessage }] 
-  };
+  
   activeSessions.set(ticketId, session);
   return session;
 }
@@ -119,52 +23,69 @@ async function getOrCreateSession(ticketId) {
 async function generateCode(ticketId) {
   try {
     await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
-    const session = await getOrCreateSession(ticketId);
     const ticket = await Ticket.findById(ticketId);
 
-    // Generate code using the ticket details and context
-    const codeResponse = await session.agent.invoke({
-      messages: [
-        ...session.conversationHistory,
-        {
-          role: "user",
-          content: JSON.stringify({
-            intent: ticket.intent,
-            trigger: ticket.trigger,
-            rules: ticket.rules,
-            output: ticket.output,
-            notes: ticket.notes,
-            globalContext: GLOBAL_CONTEXT
-          })
+    // Generate code using goose service
+    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
+      sessionId: ticketId,
+      prompt: JSON.stringify({
+        task: "Generate SAP CAP Java implementation based on the following requirements. First explain your reasoning, then provide the code implementation.",
+        requirements: {
+          intent: ticket.intent,
+          trigger: ticket.trigger,
+          rules: ticket.rules,
+          output: ticket.output,
+          notes: ticket.notes
+        },
+        format: {
+          reasoning: "Start with 'Reasoning:' followed by your analysis",
+          code: "Start with 'Implementation:' followed by the code"
         }
-      ]
+      })
     });
 
-    // Store conversation history
-    session.conversationHistory = codeResponse.messages;
+    const lastMessage = codeResponse.data.response;
+    const reasoningMatch = lastMessage.match(/Reasoning:(.*?)(?=Implementation:|$)/s);
+    const codeMatch = lastMessage.match(/Implementation:(.*?)$/s);
+    
+    const codeReasoning = reasoningMatch ? reasoningMatch[1].trim() : '';
+    const generatedCode = codeMatch ? codeMatch[1].trim() : lastMessage;
 
-    // Generate test cases using the same session
-    const testResponse = await session.agent.invoke({
-      messages: [
-        ...session.conversationHistory,
-        {
-          role: "user",
-          content: JSON.stringify({
-            task: "Generate test cases for the following code:",
-            code: codeResponse.messages[codeResponse.messages.length - 1].content,
-            globalContext: GLOBAL_CONTEXT
-          })
+    // Generate test cases
+    const testResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
+      sessionId: `${ticketId}_tests`,
+      prompt: JSON.stringify({
+        task: "Generate Mokito test cases for the following SAP CAP Java code. First explain your reasoning, then provide the test implementation.",
+        code: generatedCode,
+        requirements: {
+          intent: ticket.intent,
+          trigger: ticket.trigger,
+          rules: ticket.rules,
+          output: ticket.output
+        },
+        format: {
+          reasoning: "Start with 'Reasoning:' followed by your analysis",
+          code: "Start with 'Implementation:' followed by the test code"
         }
-      ]
+      })
     });
 
-    // Update conversation history with test generation
-    session.conversationHistory = testResponse.messages;
+    const lastTestMessage = testResponse.data.response;
+    const testReasoningMatch = lastTestMessage.match(/Reasoning:(.*?)(?=Implementation:|$)/s);
+    const testCodeMatch = lastTestMessage.match(/Implementation:(.*?)$/s);
+    
+    const testReasoning = testReasoningMatch ? testReasoningMatch[1].trim() : '';
+    const generatedTests = testCodeMatch ? testCodeMatch[1].trim() : lastTestMessage;
 
     await Ticket.findByIdAndUpdate(ticketId, {
       status: 'completed',
-      generatedCode: codeResponse.messages[codeResponse.messages.length - 1].content,
-      testCases: testResponse.messages[testResponse.messages.length - 1].content
+      generatedCode: generatedCode,
+      testCases: generatedTests,
+      agentReasoning: {
+        codeGeneration: codeReasoning,
+        testGeneration: testReasoning,
+        timestamp: new Date().toISOString()
+      }
     });
 
   } catch (error) {
@@ -172,7 +93,11 @@ async function generateCode(ticketId) {
     await Ticket.findByIdAndUpdate(ticketId, { 
       status: 'failed',
       generatedCode: `// Error: ${error.message}`,
-      testCases: `// Error: ${error.message}`
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 }
@@ -180,29 +105,13 @@ async function generateCode(ticketId) {
 // Refine code with chat
 async function refineCode(ticketId, prompt) {
   try {
-    const session = await getOrCreateSession(ticketId);
-    const ticket = await Ticket.findById(ticketId);
-    if (!ticket) throw new Error('Ticket not found');
-
-    const response = await session.agent.invoke({
-      messages: [
-        ...session.conversationHistory,
-        {
-          role: "user",
-          content: JSON.stringify({
-            prompt,
-            globalContext: GLOBAL_CONTEXT
-          })
-        }
-      ]
+    const response = await axios.post(`${GOOSE_SERVICE_URL}/refine`, {
+      sessionId: ticketId,
+      prompt
     });
 
-    // Update conversation history
-    session.conversationHistory = response.messages;
-
-    // Update ticket with refined code
     await Ticket.findByIdAndUpdate(ticketId, {
-      generatedCode: response.messages[response.messages.length - 1].content
+      generatedCode: response.data.response
     });
 
     return { success: true, message: 'Code refined successfully' };
@@ -214,10 +123,11 @@ async function refineCode(ticketId, prompt) {
 
 // Cleanup session when ticket is deleted
 async function cleanupSession(ticketId) {
-  const session = activeSessions.get(ticketId);
-  if (session) {
-    await session.client.close();
-    activeSessions.delete(ticketId);
+  try {
+    await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}`);
+    await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`);
+  } catch (error) {
+    console.error('Session cleanup failed:', error);
   }
 }
 
