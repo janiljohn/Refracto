@@ -6,6 +6,8 @@ import stripAnsi from 'strip-ansi';
 const app = express();
 app.use(express.json());
 
+const GOOSE_WORKING_DIR = '/Users/rohitjayakrishnan/Documents/Refracto2/backend/src/repos/c71d49ce-fc1a-4a46-be1b-a042b0bc2a87'
+
 // Session management
 const activeSessions = new Map();
 
@@ -41,19 +43,25 @@ const getOrCreateSession = async (sessionId) => {
 
 // Execute goose command
 const executeGooseCommand = async (session, prompt, timeout = 120000) => {
-    const args = ['session'];
+    const arg = ['session'];
     if (session.history.length > 0) {
-        args.push('--resume');
+        arg.push('--resume');
     }
-    args.push('--name', session.name);
+    arg.push('--name', session.name);
 
-    const proc = spawn('goose', args, {
+    const argString = arg.join(' ');  // This will convert ['session', '--name', 'session_school'] to "session --name session_school"
+
+    const args = ['-c', `cd ${GOOSE_WORKING_DIR} && goose ${argString}`];
+    const proc = spawn('bash', args, {
         stdio: ['pipe', 'pipe', 'pipe']
     });
 
     const inputCommands = `${prompt}\nexit\n`;
     proc.stdin.write(inputCommands);
     proc.stdin.end();
+
+    console.log("Here......");
+    
 
     return new Promise((resolve, reject) => {
         let stdout = '';
@@ -80,94 +88,41 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
     });
 };
 
-// ```// filepath: /home/mellow/Desktop/refracto/Refracto/backend/src/services/goose-service.js
-// const executeGooseCommand = async (session, prompt, timeout = 120000) => {
-//     const args = ['session'];
-//     if (session.history.length > 0) {
-//         args.push('--resume');
-//     }
-//     args.push('--name', session.name);
-
-//     const proc = spawn('goose', args, {
-//         stdio: ['pipe', 'pipe', 'pipe']
-//     });
-
-//     const inputCommands = `${prompt}\nexit\n`;
-//     proc.stdin.write(inputCommands);
-//     proc.stdin.end();
-
-//     return new Promise((resolve, reject) => {
-//         let stdout = '';
-//         let stderr = '';
-
-//         proc.stdout.on('data', (data) => stdout += data);
-//         proc.stderr.on('data', (data) => stderr += data);
-
-//         proc.on('close', (code) => {
-//             if (code !== 0) {
-//                 reject(new Error(stderr));
-//             } else {
-//                 const cleanedOutput = cleanOutput(stdout);
-//                 session.history.push({ role: 'user', content: prompt });
-//                 session.history.push({ role: 'assistant', content: cleanedOutput });
-//                 resolve(cleanedOutput);
-//             }
-//         });
-
-//         setTimeout(() => {
-//             proc.kill();
-//             reject(new Error('Session command timed out.'));
-//         }, timeout);
-//     });
-// };
-// const executeGooseCommand = async (session, prompt, timeout = 120000) => {
-//     const proc = spawn('goose', ['session', '--name', session.name], {
-//         stdio: ['pipe', 'pipe', 'pipe']
-//     });
-
-//     const inputCommands = `${prompt}\nexit\n`;
-//     proc.stdin.write(inputCommands);
-//     proc.stdin.end();
-
-//     return new Promise((resolve, reject) => {
-//         let stdout = '';
-//         let stderr = '';
-
-//         proc.stdout.on('data', (data) => stdout += data);
-//         proc.stderr.on('data', (data) => stderr += data);
-
-//         proc.on('close', (code) => {
-//             if (code !== 0) {
-//                 reject(new Error(stderr));
-//             } else {
-//                 const cleanedOutput = cleanOutput(stdout);
-//                 session.history.push({ role: 'user', content: prompt });
-//                 session.history.push({ role: 'assistant', content: cleanedOutput });
-//                 resolve(cleanedOutput);
-//             }
-//         });
-
-//         setTimeout(() => {
-//             proc.kill();
-//             reject(new Error('Session command timed out.'));
-//         }, timeout);
-//     });
-// };
 
 // API Endpoints
 app.post('/generate', async (req, res) => {
-    const { sessionId, prompt } = req.body;
+    // console.log(req.body);
+    // console.log(req.body.prompt);
+    
+    const { sessionId, prompt, context } = req.body;
 
-    console.log(prompt['task']);
+    const task = prompt.task
+    const requirements = prompt.requirements
+    const notes = prompt.notes
+    const trigger = prompt.trigger
+    const rules = prompt.rules
+    const output = prompt.output
+    
+    console.log(requirements);
+    console.log(notes);
+    console.log(trigger);
+
+    const fullPrompt = `
+    TASK: ${task}
+    REQUIREMENTS: ${requirements}
+    NOTES: ${notes} 
+    TRIGGER: ${trigger} 
+    RULES: ${rules} 
+    OUTPUT: ${output}
+    `
+
+    console.log(fullPrompt);
     
     
     try {
         const session = await getOrCreateSession(sessionId);
-        // const fullPrompt = context ? 
-        //     `${JSON.stringify(context, null, 2)}\n\n${prompt}` : 
-        //     prompt;
 
-        const response = await executeGooseCommand(session, prompt['task']);
+        const response = await executeGooseCommand(session, fullPrompt);
         res.json({ 
             response,
             sessionId: session.id,

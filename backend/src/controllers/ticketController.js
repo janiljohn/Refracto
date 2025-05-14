@@ -28,20 +28,30 @@ async function generateCode(ticketId) {
     // Generate code using goose service
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
-      prompt: JSON.stringify({
-        task: "Generate SAP CAP Java implementation based on the following requirements. First explain your reasoning, then provide the code implementation.",
-        requirements: {
-          intent: ticket.intent,
-          trigger: ticket.trigger,
-          rules: ticket.rules,
-          output: ticket.output,
-          notes: ticket.notes
-        },
-        format: {
-          reasoning: "Start with 'Reasoning:' followed by your analysis",
-          code: "Start with 'Implementation:' followed by the code"
-        }
-      })
+      prompt: {
+        task: "Generate SAP CAP Java implementation based on the following . First explain your reasoning, then provide the code implementation.",
+        requirements: ticket.intent,
+        notes: ticket.notes,
+        trigger: ticket.trigger,
+        rules: ticket.rules,
+        output: ticket.output
+      },
+      context: "Give the code output only, no other text."
+      // prompt: JSON.stringify({
+      //   task: "Generate SAP CAP Java implementation based on the following requirements. First explain your reasoning, then provide the code implementation.",
+        // context: "",
+        // requirements: {
+        //   intent: ticket.intent,
+        //   trigger: ticket.trigger,
+        //   rules: ticket.rules,
+        //   output: ticket.output,
+        //   notes: ticket.notes
+        // },
+        // format: {
+        //   reasoning: "Start with 'Reasoning:' followed by your analysis",
+        //   code: "Start with 'Implementation:' followed by the code"
+        // }
+      // })
     });
 
     const lastMessage = codeResponse.data.response;
