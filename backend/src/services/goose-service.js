@@ -6,7 +6,8 @@ import stripAnsi from 'strip-ansi';
 const app = express();
 app.use(express.json());
 
-const GOOSE_WORKING_DIR = '/Users/rohitjayakrishnan/Documents/Refracto2/backend/src/repos/c71d49ce-fc1a-4a46-be1b-a042b0bc2a87'
+// const GOOSE_WORKING_DIR = '/Users/rohitjayakrishnan/Documents/Refracto2/backend/src/repos/c71d49ce-fc1a-4a46-be1b-a042b0bc2a87'
+const GOOSE_WORKING_DIR = process.env.GOOSE_WORKING_DIR
 
 // Session management
 const activeSessions = new Map();
@@ -56,7 +57,17 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
         stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    const inputCommands = `${prompt}\nexit\n`;
+    // const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
+    const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
+    const formattedInputCommands = inputCommands
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .join(' ');
+// log("Input Commands:", formattedInputCommands);
+// proc.stdin.write(formattedInputCommands);
+// proc.stdin.end();
+    log("Input Commands:", inputCommands);
     proc.stdin.write(inputCommands);
     proc.stdin.end();
 
@@ -66,6 +77,17 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
     return new Promise((resolve, reject) => {
         let stdout = '';
         let stderr = '';
+
+        // Log output as soon as it is available
+        proc.stdin.on('data', (data) => {
+            console.log("Input:", data.toString());
+        });
+        proc.stdout.on('data', (data) => {
+            console.log("Child stdout:", data.toString());
+        });
+        proc.stderr.on('data', (data) => {
+            console.error("Child stderr:", data.toString());
+        });
 
         proc.stdout.on('data', (data) => stdout += data);
         proc.stderr.on('data', (data) => stderr += data);
@@ -78,6 +100,7 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
                 session.history.push({ role: 'user', content: prompt });
                 session.history.push({ role: 'assistant', content: cleanedOutput });
                 resolve(cleanedOutput);
+                proc.kill()
             }
         });
 
@@ -107,14 +130,7 @@ app.post('/generate', async (req, res) => {
     console.log(notes);
     console.log(trigger);
 
-    const fullPrompt = `
-    TASK: ${task}
-    REQUIREMENTS: ${requirements}
-    NOTES: ${notes} 
-    TRIGGER: ${trigger} 
-    RULES: ${rules} 
-    OUTPUT: ${output}
-    `
+    const fullPrompt = `TASK: ${task}. REQUIREMENTS: ${requirements}. NOTES: ${notes}. TRIGGER: ${trigger}. RULES: ${rules}. OUTPUT: ${output}`
 
     console.log(fullPrompt);
     

@@ -29,7 +29,8 @@ async function generateCode(ticketId) {
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
       prompt: {
-        task: "Generate SAP CAP Java implementation based on the following . First explain your reasoning, then provide the code implementation.",
+        // task: "Generate SAP CAP Java implementation based on the following . First explain your reasoning, then provide the code implementation.",
+        task: ticket.title,
         requirements: ticket.intent,
         notes: ticket.notes,
         trigger: ticket.trigger,
