@@ -29,30 +29,19 @@ async function generateCode(ticketId) {
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
       prompt: {
-        // task: "Generate SAP CAP Java implementation based on the following . First explain your reasoning, then provide the code implementation.",
-        task: ticket.title,
-        requirements: ticket.intent,
+        task: "Generate SAP CAP Java implementation based on the following ticket details:",
+        intent: ticket.intent,
         notes: ticket.notes,
         trigger: ticket.trigger,
         rules: ticket.rules,
         output: ticket.output
       },
-      context: "Give the code output only, no other text."
-      // prompt: JSON.stringify({
-      //   task: "Generate SAP CAP Java implementation based on the following requirements. First explain your reasoning, then provide the code implementation.",
-        // context: "",
-        // requirements: {
-        //   intent: ticket.intent,
-        //   trigger: ticket.trigger,
-        //   rules: ticket.rules,
-        //   output: ticket.output,
-        //   notes: ticket.notes
-        // },
-        // format: {
-        //   reasoning: "Start with 'Reasoning:' followed by your analysis",
-        //   code: "Start with 'Implementation:' followed by the code"
-        // }
-      // })
+      context: `Please respond ONLY in the following JSON format:
+{
+  "code": "<complete code block as a java code markdown>",
+  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+}
+Do not include any extra text outside the JSON.`
     });
 
     const lastMessage = codeResponse.data.response;
@@ -64,21 +53,23 @@ async function generateCode(ticketId) {
 
     // Generate test cases
     const testResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
-      sessionId: `${ticketId}_tests`,
-      prompt: JSON.stringify({
-        task: "Generate Mokito test cases for the following SAP CAP Java code. First explain your reasoning, then provide the test implementation.",
-        code: generatedCode,
-        requirements: {
-          intent: ticket.intent,
-          trigger: ticket.trigger,
-          rules: ticket.rules,
-          output: ticket.output
-        },
-        format: {
-          reasoning: "Start with 'Reasoning:' followed by your analysis",
-          code: "Start with 'Implementation:' followed by the test code"
-        }
-      })
+      sessionId: ticketId,
+      prompt: {
+        task: "Generate test cases for the generated SAP CAP Java code. ",
+        // code: generatedCode,
+        // requirements: {
+        //   intent: ticket.intent,
+        //   trigger: ticket.trigger,
+        //   rules: ticket.rules,
+        //   output: ticket.output
+        // },
+        context: `Please respond ONLY in the following JSON format:
+{
+  "code": "<complete test code block as a java code markdown>",
+  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+}
+Do not include any extra text outside the JSON.`
+      }
     });
 
     const lastTestMessage = testResponse.data.response;

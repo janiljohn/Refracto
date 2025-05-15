@@ -126,23 +126,25 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
 app.post('/generate', async (req, res) => {    
     const { sessionId, prompt, context } = req.body;
 
-    // Only include non-empty fields
-    const task = prompt.task || '';
-    const code = prompt.code || '';
-    const requirements = prompt.requirements || {};
-    const intent = requirements.intent || '';
-    const trigger = requirements.trigger || '';
-    const rules = requirements.rules || '';
-    const output = requirements.output || '';
+    const task = prompt.task
+    const intent = prompt.intent
+    const notes = prompt.notes
+    const trigger = prompt.trigger
+    const rules = prompt.rules
+    const output = prompt.output
+    
+    // console.log(requirements);
+    // console.log(notes);
+    // console.log(trigger);
 
-    const fullPrompt = context ? 
-        `${context}\nTask: ${task}\nCode: ${code}\nIntent: ${intent}\nTrigger: ${trigger}\nRules: ${rules}\nOutput: ${output}` :
-        `Task: ${task}\nCode: ${code}\nIntent: ${intent}\nTrigger: ${trigger}\nRules: ${rules}\nOutput: ${output}`;
+    const fullPrompt = `${context}. TASK: ${task}. REQUIREMENTS: ${intent}. NOTES: ${notes}. TRIGGER: ${trigger}. RULES: ${rules}. OUTPUT: ${output}`
 
-    console.log('Prompt:', fullPrompt);
-
+    console.log(fullPrompt);
+    
+    
     try {
         const session = await getOrCreateSession(sessionId);
+
         const response = await executeGooseCommand(session, fullPrompt);
         res.json({ 
             response,
@@ -150,7 +152,6 @@ app.post('/generate', async (req, res) => {
             history: session.history
         });
     } catch (error) {
-        console.error('Generate error:', error);
         res.status(500).json({ error: error.message });
     }
 });
