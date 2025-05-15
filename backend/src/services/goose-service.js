@@ -6,7 +6,6 @@ import stripAnsi from 'strip-ansi';
 const app = express();
 app.use(express.json());
 
-// const GOOSE_WORKING_DIR = '/Users/rohitjayakrishnan/Documents/Refracto2/backend/src/repos/c71d49ce-fc1a-4a46-be1b-a042b0bc2a87'
 const GOOSE_WORKING_DIR = process.env.GOOSE_WORKING_DIR
 
 // Session management
@@ -14,7 +13,7 @@ const activeSessions = new Map();
 
 // Helper to clean output
 const cleanOutput = (output) => {
-    return stripAnsi(output)
+    const cleaned = stripAnsi(output)
         .replace(/[\u2500-\u257F]+/g, '')
         .split('\n')
         .filter(line => !(
@@ -24,6 +23,24 @@ const cleanOutput = (output) => {
         ))
         .join('\n')
         .trim();
+
+    // Try to parse the response into code and reasoning
+    try {
+        // Look for code blocks and reasoning sections
+        const codeMatch = cleaned.match(/```(?:java)?\n([\s\S]*?)```/);
+        const reasoningMatch = cleaned.match(/Reasoning:([\s\S]*?)(?=```|$)/i);
+
+        return {
+            code: codeMatch ? codeMatch[1].trim() : cleaned,
+            reasoning: reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided'
+        };
+    } catch (error) {
+        console.error('Error parsing output:', error);
+        return {
+            code: cleaned,
+            reasoning: 'Error parsing response'
+        };
+    }
 };
 
 // Create or get session
@@ -59,19 +76,12 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
 
     // const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
     const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
-    const formattedInputCommands = inputCommands
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .join(' ');
-// log("Input Commands:", formattedInputCommands);
-// proc.stdin.write(formattedInputCommands);
-// proc.stdin.end();
+
     log("Input Commands:", inputCommands);
     proc.stdin.write(inputCommands);
     proc.stdin.end();
 
-    console.log("Here......");
+    // console.log("Here......");
     
 
     return new Promise((resolve, reject) => {
@@ -96,10 +106,10 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
             if (code !== 0) {
                 reject(new Error(stderr));
             } else {
-                const cleanedOutput = cleanOutput(stdout);
+                const parsedOutput = cleanOutput(stdout);
                 session.history.push({ role: 'user', content: prompt });
-                session.history.push({ role: 'assistant', content: cleanedOutput });
-                resolve(cleanedOutput);
+                session.history.push({ role: 'assistant', content: parsedOutput });
+                resolve(parsedOutput);
                 proc.kill()
             }
         });
@@ -113,31 +123,26 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
 
 
 // API Endpoints
-app.post('/generate', async (req, res) => {
-    // console.log(req.body);
-    // console.log(req.body.prompt);
-    
+app.post('/generate', async (req, res) => {    
     const { sessionId, prompt, context } = req.body;
 
-    const task = prompt.task
-    const requirements = prompt.requirements
-    const notes = prompt.notes
-    const trigger = prompt.trigger
-    const rules = prompt.rules
-    const output = prompt.output
-    
-    console.log(requirements);
-    console.log(notes);
-    console.log(trigger);
+    // Only include non-empty fields
+    const task = prompt.task || '';
+    const code = prompt.code || '';
+    const requirements = prompt.requirements || {};
+    const intent = requirements.intent || '';
+    const trigger = requirements.trigger || '';
+    const rules = requirements.rules || '';
+    const output = requirements.output || '';
 
-    const fullPrompt = `TASK: ${task}. REQUIREMENTS: ${requirements}. NOTES: ${notes}. TRIGGER: ${trigger}. RULES: ${rules}. OUTPUT: ${output}`
+    const fullPrompt = context ? 
+        `${context}\nTask: ${task}\nCode: ${code}\nIntent: ${intent}\nTrigger: ${trigger}\nRules: ${rules}\nOutput: ${output}` :
+        `Task: ${task}\nCode: ${code}\nIntent: ${intent}\nTrigger: ${trigger}\nRules: ${rules}\nOutput: ${output}`;
 
-    console.log(fullPrompt);
-    
-    
+    console.log('Prompt:', fullPrompt);
+
     try {
         const session = await getOrCreateSession(sessionId);
-
         const response = await executeGooseCommand(session, fullPrompt);
         res.json({ 
             response,
@@ -145,6 +150,7 @@ app.post('/generate', async (req, res) => {
             history: session.history
         });
     } catch (error) {
+        console.error('Generate error:', error);
         res.status(500).json({ error: error.message });
     }
 });
