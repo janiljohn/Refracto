@@ -44,12 +44,18 @@ async function generateCode(ticketId) {
 Do not include any extra text outside the JSON.`
     });
 
-    const lastMessage = codeResponse.data.response;
-    const reasoningMatch = lastMessage.match(/Reasoning:(.*?)(?=Implementation:|$)/s);
-    const codeMatch = lastMessage.match(/Implementation:(.*?)$/s);
+  console.log(codeResponse);
+    
+
+    const lastMessage = codeResponse.data.response 
+    console.log('Goose Response:', lastMessage);
+    const reasoningMatch = lastMessage.match(/reasoning:(.*?)(?=code:|$)/s);
+    const codeMatch = lastMessage.match(/code:(.*?)$/s);
     
     const codeReasoning = reasoningMatch ? reasoningMatch[1].trim() : '';
+    console.log('Code reasoning:', codeReasoning);
     const generatedCode = codeMatch ? codeMatch[1].trim() : lastMessage;
+    console.log('Generated code:', generatedCode);
 
     // Generate test cases
     const testResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
@@ -73,8 +79,8 @@ Do not include any extra text outside the JSON.`
     });
 
     const lastTestMessage = testResponse.data.response;
-    const testReasoningMatch = lastTestMessage.match(/Reasoning:(.*?)(?=Implementation:|$)/s);
-    const testCodeMatch = lastTestMessage.match(/Implementation:(.*?)$/s);
+    const testReasoningMatch = lastTestMessage.match(/reasoning:(.*?)(?=code:|$)/s);
+    const testCodeMatch = lastTestMessage.match(/code:(.*?)$/s);
     
     const testReasoning = testReasoningMatch ? testReasoningMatch[1].trim() : '';
     const generatedTests = testCodeMatch ? testCodeMatch[1].trim() : lastTestMessage;

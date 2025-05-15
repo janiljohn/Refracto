@@ -3,11 +3,12 @@ import { spawn } from 'node:child_process';
 import { log } from 'node:console';
 import stripAnsi from 'strip-ansi';
 
+import 'dotenv/config'
 const app = express();
 app.use(express.json());
 
 const GOOSE_WORKING_DIR = process.env.GOOSE_WORKING_DIR
-
+log("GOOSE_WORKING_DIR:", GOOSE_WORKING_DIR);
 // Session management
 const activeSessions = new Map();
 
@@ -24,23 +25,25 @@ const cleanOutput = (output) => {
         .join('\n')
         .trim();
 
-    // Try to parse the response into code and reasoning
-    try {
-        // Look for code blocks and reasoning sections
-        const codeMatch = cleaned.match(/```(?:java)?\n([\s\S]*?)```/);
-        const reasoningMatch = cleaned.match(/Reasoning:([\s\S]*?)(?=```|$)/i);
+    return cleaned;
 
-        return {
-            code: codeMatch ? codeMatch[1].trim() : cleaned,
-            reasoning: reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided'
-        };
-    } catch (error) {
-        console.error('Error parsing output:', error);
-        return {
-            code: cleaned,
-            reasoning: 'Error parsing response'
-        };
-    }
+    // Try to parse the response into code and reasoning
+    // try {
+    //     // Look for code blocks and reasoning sections
+    //     const codeMatch = cleaned.match(/```(?:java)?\n([\s\S]*?)```/);
+    //     const reasoningMatch = cleaned.match(/Reasoning:([\s\S]*?)(?=```|$)/i);
+
+    //     return {
+    //         code: codeMatch ? codeMatch[1].trim() : cleaned,
+    //         reasoning: reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided'
+    //     };
+    // } catch (error) {
+    //     console.error('Error parsing output:', error);
+    //     return {
+    //         code: cleaned,
+    //         reasoning: 'Error parsing response'
+    //     };
+    // }
 };
 
 // Create or get session
@@ -73,6 +76,8 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
     const proc = spawn('bash', args, {
         stdio: ['pipe', 'pipe', 'pipe']
     });
+
+    
 
     // const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
     const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
@@ -126,18 +131,18 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
 app.post('/generate', async (req, res) => {    
     const { sessionId, prompt, context } = req.body;
 
-    const task = prompt.task
-    const intent = prompt.intent
-    const notes = prompt.notes
-    const trigger = prompt.trigger
-    const rules = prompt.rules
-    const output = prompt.output
-    
-    // console.log(requirements);
-    // console.log(notes);
-    // console.log(trigger);
+    // Only include non-empty fields
+    const task = prompt.task != '' ? `TASK: ${prompt.task}` : '';
+    const requirements = prompt.intent != '' ? `REQUIREMENTS: ${prompt.intent}` : '';
+    const trigger = prompt.trigger != '' ? `TRIGGER: ${prompt.trigger}` : '';
+    const rules = prompt.rules != '' ? `RULES: ${prompt.rules}` : '';
+    const output = prompt.output !=  '' ? `OUTPUT: ${prompt.output}` : '';
 
-    const fullPrompt = `${context}. TASK: ${task}. REQUIREMENTS: ${intent}. NOTES: ${notes}. TRIGGER: ${trigger}. RULES: ${rules}. OUTPUT: ${output}`
+    const fullPrompt = context ? 
+        `${context} ${task} ${requirements} ${trigger} ${rules} ${output}` :
+        `${task} ${requirements} ${trigger} ${rules} ${output}`;
+
+    console.log('Prompt:', fullPrompt);
 
     console.log(fullPrompt);
     
