@@ -46,6 +46,12 @@ const TicketSchema = new mongoose.Schema({
     testCases: {
         type: String,
         default: ''
+    },
+    agentReasoning: {
+        codeGeneration: String,
+        testGeneration: String,
+        error: String,
+        timestamp: Date
     }
 }, {
     timestamps: true

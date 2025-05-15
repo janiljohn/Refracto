@@ -121,53 +121,6 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     return renderLoadingState();
   }
 
-  const renderReasoning = () => {
-    if (!currentTicket.agentReasoning) return null;
-
-    return (
-      <Box sx={{ mt: 4, mb: 2 }}>
-        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <span role="img" aria-label="brain">🧠</span> Agent Reasoning:
-        </Typography>
-        <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4' }}>
-          {currentTicket.agentReasoning.codeGeneration && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
-                Code Generation Reasoning:
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                {currentTicket.agentReasoning.codeGeneration}
-              </Typography>
-            </Box>
-          )}
-          {currentTicket.agentReasoning.testGeneration && (
-            <Box>
-              <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
-                Test Generation Reasoning:
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                {currentTicket.agentReasoning.testGeneration}
-              </Typography>
-            </Box>
-          )}
-          {currentTicket.agentReasoning.error && (
-            <Box sx={{ color: 'error.main' }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Error:
-              </Typography>
-              <Typography variant="body2">
-                {currentTicket.agentReasoning.error}
-              </Typography>
-            </Box>
-          )}
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-            Generated at: {new Date(currentTicket.agentReasoning.timestamp).toLocaleString()}
-          </Typography>
-        </Paper>
-      </Box>
-    );
-  };
-
   const renderTerminal = () => {
     if (!currentTicket.agentReasoning) return null;
 
@@ -220,29 +173,50 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
               fontFamily: 'monospace',
               fontSize: '0.9rem',
               lineHeight: 1.5,
-              '& pre': { margin: 0 }
+              '& pre': { 
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }
             }}>
               {currentTicket.agentReasoning.codeGeneration && (
                 <>
-                  <Typography sx={{ color: '#00ff00', mb: 1 }}>=== Code Generation Logs ===</Typography>
-                  <pre style={{ color: '#fff', whiteSpace: 'pre-wrap' }}>
-                    {currentTicket.agentReasoning.codeGeneration}
+                  <Typography sx={{ color: '#00ff00', mb: 1 }}>=== Code Generation Reasoning ===</Typography>
+                  <pre style={{ 
+                    color: '#fff', 
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'inherit',
+                    marginBottom: '1rem'
+                  }}>
+                    {currentTicket.agentReasoning.codeGeneration.replace(/\\n/g, '\n')}
                   </pre>
                 </>
               )}
               {currentTicket.agentReasoning.testGeneration && (
                 <>
-                  <Typography sx={{ color: '#00ff00', mt: 2, mb: 1 }}>=== Test Generation Logs ===</Typography>
-                  <pre style={{ color: '#fff', whiteSpace: 'pre-wrap' }}>
-                    {currentTicket.agentReasoning.testGeneration}
+                  <Typography sx={{ color: '#00ff00', mt: 2, mb: 1 }}>=== Test Generation Reasoning ===</Typography>
+                  <pre style={{ 
+                    color: '#fff', 
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'inherit',
+                    marginBottom: '1rem'
+                  }}>
+                    {currentTicket.agentReasoning.testGeneration.replace(/\\n/g, '\n')}
                   </pre>
                 </>
               )}
               {currentTicket.agentReasoning.error && (
                 <>
                   <Typography sx={{ color: '#ff4444', mt: 2, mb: 1 }}>=== Error Logs ===</Typography>
-                  <pre style={{ color: '#ff4444', whiteSpace: 'pre-wrap' }}>
-                    {currentTicket.agentReasoning.error}
+                  <pre style={{ 
+                    color: '#ff4444', 
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'inherit'
+                  }}>
+                    {currentTicket.agentReasoning.error.replace(/\\n/g, '\n')}
                   </pre>
                 </>
               )}
@@ -290,9 +264,19 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
               size="small"
               variant="outlined"
               onClick={() => setTerminalOpen(true)}
-              sx={{ color: '#00ff00', borderColor: '#00ff00', '&:hover': { borderColor: '#00ff00', bgcolor: 'rgba(0,255,0,0.1)' } }}
+              sx={{ 
+                color: '#000',
+                borderColor: '#000',
+                fontWeight: 500,
+                letterSpacing: '0.5px',
+                '&:hover': { 
+                  borderColor: '#000', 
+                  bgcolor: 'rgba(0,0,0,0.04)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }
+              }}
             >
-              View Logs
+              View Agent Reasoning
             </Button>
           )}
           <Button
@@ -467,9 +451,6 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
           )}
         </Paper>
       </Box>
-      
-      {/* Add reasoning section before the Approve button */}
-      {renderReasoning()}
       
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
         <Button
