@@ -48,8 +48,17 @@ const TicketsPage = () => {
   };
 
   const handleUpdate = async (updatedTicket) => {
-    await updateTicket(updatedTicket._id, { description: updatedTicket.description });
-    setSelectedTicket((prev) => ({ ...prev, description: updatedTicket.description }));
+    await updateTicket(updatedTicket._id, {
+      description: updatedTicket.description,
+      generatedCode: updatedTicket.generatedCode,
+      testCases: updatedTicket.testCases
+    });
+    setSelectedTicket((prev) => ({
+      ...prev,
+      description: updatedTicket.description,
+      generatedCode: updatedTicket.generatedCode,
+      testCases: updatedTicket.testCases
+    }));
     setMode('view');
     setRefreshTickets((c) => c + 1);
   };
