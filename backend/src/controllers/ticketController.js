@@ -3,21 +3,22 @@ const axios = require('axios');
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://localhost:8080';
 
-// Store active sessions
-const activeSessions = new Map();
+function extractCodeAndReasoningLoosely(outputText) {
+  const codeMatch = outputText.match(/"code":\s*"```[a-z]*\n([\s\S]*?)```"/);
+  const reasoningMatch = outputText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
-
-async function getOrCreateSession(ticketId) {
-  if (activeSessions.has(ticketId)) {
-    return activeSessions.get(ticketId);
+  if (!codeMatch || !reasoningMatch) {
+    throw new Error("Could not extract code or reasoning.");
   }
 
-  const ticket = await Ticket.findById(ticketId);
-  if (!ticket) throw new Error('Ticket not found');
+  // Unescape any escaped quotes or characters, if needed
+  const rawCode = codeMatch[1].replace(/\\"/g, '"');
+  const reasoning = reasoningMatch[1].replace(/\\"/g, '"');
 
-  
-  activeSessions.set(ticketId, session);
-  return session;
+  return {
+    code: rawCode,
+    reasoning: reasoning.trim()
+  };
 }
 
 async function generateCode(ticketId) {
@@ -32,6 +33,7 @@ async function generateCode(ticketId) {
         task: "Generate SAP CAP Java implementation based on the following ticket details:",
         intent: ticket.intent,
         notes: ticket.notes,
+        cds: ticket.cds,
         trigger: ticket.trigger,
         rules: ticket.rules,
         output: ticket.output
@@ -44,46 +46,29 @@ async function generateCode(ticketId) {
 Do not include any extra text outside the JSON.`
     });
 
-  console.log(codeResponse);
-    
-
-    const lastMessage = codeResponse.data.response 
-    console.log('Goose Response:', lastMessage);
-    const reasoningMatch = lastMessage.match(/reasoning:(.*?)(?=code:|$)/s);
-    const codeMatch = lastMessage.match(/code:(.*?)$/s);
-    
-    const codeReasoning = reasoningMatch ? reasoningMatch[1].trim() : '';
-    console.log('Code reasoning:', codeReasoning);
-    const generatedCode = codeMatch ? codeMatch[1].trim() : lastMessage;
-    console.log('Generated code:', generatedCode);
+    console.log('Goose Response:', codeResponse.data.response);
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
+    console.log('Extracted Code:', generatedCode);
+    console.log('Extracted Reasoning:', codeReasoning);
 
     // Generate test cases
     const testResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
       prompt: {
-        task: "Generate test cases for the generated SAP CAP Java code. ",
-        // code: generatedCode,
-        // requirements: {
-        //   intent: ticket.intent,
-        //   trigger: ticket.trigger,
-        //   rules: ticket.rules,
-        //   output: ticket.output
-        // },
-        context: `Please respond ONLY in the following JSON format:
+        task: "Generate test cases for the generated SAP CAP Java code. "
+      },
+      context: `Please respond ONLY in the following JSON format:
 {
   "code": "<complete test code block as a java code markdown>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
 Do not include any extra text outside the JSON.`
-      }
     });
 
-    const lastTestMessage = testResponse.data.response;
-    const testReasoningMatch = lastTestMessage.match(/reasoning:(.*?)(?=code:|$)/s);
-    const testCodeMatch = lastTestMessage.match(/code:(.*?)$/s);
-    
-    const testReasoning = testReasoningMatch ? testReasoningMatch[1].trim() : '';
-    const generatedTests = testCodeMatch ? testCodeMatch[1].trim() : lastTestMessage;
+    console.log('Goose Test Response:', testResponse.data.response);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(testResponse.data.response);
+    console.log('Extracted Test Code:', generatedTests);
+    console.log('Extracted Test Reasoning:', testReasoning);
 
     await Ticket.findByIdAndUpdate(ticketId, {
       status: 'completed',

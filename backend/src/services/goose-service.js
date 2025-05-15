@@ -26,24 +26,6 @@ const cleanOutput = (output) => {
         .trim();
 
     return cleaned;
-
-    // Try to parse the response into code and reasoning
-    // try {
-    //     // Look for code blocks and reasoning sections
-    //     const codeMatch = cleaned.match(/```(?:java)?\n([\s\S]*?)```/);
-    //     const reasoningMatch = cleaned.match(/Reasoning:([\s\S]*?)(?=```|$)/i);
-
-    //     return {
-    //         code: codeMatch ? codeMatch[1].trim() : cleaned,
-    //         reasoning: reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided'
-    //     };
-    // } catch (error) {
-    //     console.error('Error parsing output:', error);
-    //     return {
-    //         code: cleaned,
-    //         reasoning: 'Error parsing response'
-    //     };
-    // }
 };
 
 // Create or get session
@@ -77,17 +59,10 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
         stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    
+    const inputCommands = `${JSON.stringify(prompt)}\n`;
 
-    // const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
-    const inputCommands = `${JSON.stringify(prompt)}\nexit\n`;
-
-    log("Input Commands:", inputCommands);
     proc.stdin.write(inputCommands);
     proc.stdin.end();
-
-    // console.log("Here......");
-    
 
     return new Promise((resolve, reject) => {
         let stdout = '';
@@ -132,24 +107,24 @@ app.post('/generate', async (req, res) => {
     const { sessionId, prompt, context } = req.body;
 
     // Only include non-empty fields
-    const task = prompt.task != '' ? `TASK: ${prompt.task}` : '';
-    const requirements = prompt.intent != '' ? `REQUIREMENTS: ${prompt.intent}` : '';
-    const trigger = prompt.trigger != '' ? `TRIGGER: ${prompt.trigger}` : '';
-    const rules = prompt.rules != '' ? `RULES: ${prompt.rules}` : '';
-    const output = prompt.output !=  '' ? `OUTPUT: ${prompt.output}` : '';
+    const task = prompt.task != '' ? `${prompt.task}` : '';
+    const requirements = prompt.intent != '' ? `Requirement we want to implement: ${prompt.intent}` : '';
+    const trigger = prompt.trigger != '' ? `Trigger conditions to enforce: ${prompt.trigger}` : '';
+    const rules = prompt.rules != '' ? `Constraints to enforce : ${prompt.rules}` : '';
+    const output = prompt.output != '' ? `Desired Output should look like: ${prompt.output}` : '';
+    const notes = prompt.notes != '' ? `Additional notes to be considered: ${prompt.notes}` : '';
+    const cds = prompt.cds && prompt.cds.entities != [] ? `CDS entities that may be involved: ${prompt.cds.entities.join(", ")}` : '';
 
-    const fullPrompt = context ? 
-        `${context} ${task} ${requirements} ${trigger} ${rules} ${output}` :
-        `${task} ${requirements} ${trigger} ${rules} ${output}`;
+    const fullPrompt = [context, task, requirements, cds, trigger, rules, notes, output]
+        .filter(Boolean)  // Remove empty strings
+        .join(' ');
 
-    console.log('Prompt:', fullPrompt);
-
-    console.log(fullPrompt);
-    
+    console.log("//////////////////////")
+    console.log('Prompt in goose backend:', fullPrompt);
+    console.log("//////////////////////")
     
     try {
         const session = await getOrCreateSession(sessionId);
-
         const response = await executeGooseCommand(session, fullPrompt);
         res.json({ 
             response,

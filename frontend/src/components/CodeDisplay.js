@@ -41,26 +41,50 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     setCurrentTicket(ticket);
     setCodeEdit(ticket.generatedCode || codeSample);
     setTestEdit(ticket.testCases || testSample);
+    console.log('Ticket data:', {
+      status: ticket.status,
+      hasReasoning: !!ticket.agentReasoning,
+      reasoning: ticket.agentReasoning
+    });
   }, [ticket]);
 
   // Poll for updates when status is pending or in_progress
   useEffect(() => {
     let interval;
-    if (currentTicket.status === 'pending' || currentTicket.status === 'in_progress' || currentTicket.status === 'new') {
-      interval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/tickets/${currentTicket._id}`);
-          const updatedTicket = await response.json();
-          setCurrentTicket(updatedTicket);
-          if (updatedTicket.status !== 'pending' && updatedTicket.status !== 'in_progress' && updatedTicket.status !== 'new') {
-            clearInterval(interval);
-          }
-        } catch (error) {
-          console.error('Error polling ticket status:', error);
+    const pollTicket = async () => {
+      try {
+        const response = await fetch(`/api/tickets/${currentTicket._id}`);
+        const updatedTicket = await response.json();
+        console.log('Polled ticket data:', {
+          status: updatedTicket.status,
+          hasReasoning: !!updatedTicket.agentReasoning,
+          reasoning: updatedTicket.agentReasoning
+        });
+        setCurrentTicket(updatedTicket);
+        setCodeEdit(updatedTicket.generatedCode || codeSample);
+        setTestEdit(updatedTicket.testCases || testSample);
+        
+        // Stop polling if ticket is completed or failed
+        if (updatedTicket.status === 'completed' || updatedTicket.status === 'failed') {
+          clearInterval(interval);
         }
-      }, 2000); // Poll every 2 seconds
+      } catch (error) {
+        console.error('Error polling ticket status:', error);
+        clearInterval(interval);
+      }
+    };
+
+    if (currentTicket.status === 'pending' || currentTicket.status === 'in_progress' || currentTicket.status === 'new') {
+      // Poll immediately and then every 2 seconds
+      pollTicket();
+      interval = setInterval(pollTicket, 2000);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [currentTicket._id, currentTicket.status]);
 
   const handleEdit = () => setEditOpen(true);
