@@ -24,6 +24,53 @@ function extractCodeAndReasoningLoosely(rawText) {
   return { code, reasoning };
 }
 
+async function handleApproveAndApply(ticketId) {
+  try {
+    // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
+    const ticket = await Ticket.findById(ticketId);
+
+    // Generate code using goose service
+    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
+      sessionId: ticketId,
+      prompt: {
+        task: "Perform the following Git operations based on the ticket details:",
+        intent: ticket.intent,
+        // notes: ticket.notes,
+        // cds: ticket.cds,
+        // trigger: ticket.trigger,
+        // rules: ticket.rules,
+        // output: ticket.output
+      },
+      context: `1. Create and switch to a new branch named feature/${ticketId}.
+2. Stage all modified and new files.
+3. Commit them with appropriate message based on the requirements.
+4. Push the branch to the remote ${ticket.githubUrl}.
+5. Open a pull request against main:
+   - Title: same as the commit message.
+   - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+   - Add inline comments summarizing the core logic updates.
+Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+    });
+
+    console.log('Goose Response:', codeResponse.data.response);
+    // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
+    // console.log('Extracted Code:', generatedCode);
+    // console.log('Extracted Reasoning:', codeReasoning);
+} catch (error) {
+    console.error('Code Push operation failed:', error);
+    await Ticket.findByIdAndUpdate(ticketId, { 
+      status: 'failed',
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+}
+
+
 async function generateCode(ticketId) {
   try {
     await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });

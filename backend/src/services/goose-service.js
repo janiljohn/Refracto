@@ -151,6 +151,35 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
     });
 };
 
+app.post('/approve', async (req, res) => {
+    const { sessionId, prompt, context } = req.body;
+    
+    const task = prompt.task != '' ? `${prompt.task}` : '';
+    const requirements = prompt.intent != '' ? `Requirement we want to implement: ${prompt.intent}` : '';
+    // const rules = prompt.rules != '' ? `Constraints to enforce : ${prompt.rules}` : '';
+    // const output = prompt.output != '' ? `Desired Output should look like: ${prompt.output}` : '';
+
+    const fullPrompt = [context, task, requirements]
+        .filter(Boolean)  // Remove empty strings
+        .join(' ');
+
+    console.log("//////////////////////")
+    console.log('Prompt in goose backend:', fullPrompt);
+    console.log("//////////////////////")
+    
+    try {
+        const session = await getOrCreateSession(sessionId);
+        const response = await executeGooseCommand(session, prompt);
+        res.json({ 
+            response,
+            sessionId: session.id,
+            history: session.history
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+})
+
 
 // API Endpoints
 app.post('/generate', async (req, res) => {    
