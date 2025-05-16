@@ -3,22 +3,25 @@ const axios = require('axios');
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://localhost:8080';
 
-function extractCodeAndReasoningLoosely(outputText) {
-  const codeMatch = outputText.match(/"code":\s*"```[a-z]*\n([\s\S]*?)```"/);
-  const reasoningMatch = outputText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+function extractCodeAndReasoningLoosely(rawText) {
+  // Clean up: remove any "Goose Response:" prefixes
+  const cleanedText = rawText
+    .split('\n')
+    .filter(line => !line.startsWith('Goose Response:'))
+    .join('\n');
+
+  // Extract code inside ```java ... ```
+  const codeMatch = cleanedText.match(/"code":\s*```(?:java)?\n([\s\S]*?)```/);
+  const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
   if (!codeMatch || !reasoningMatch) {
-    throw new Error("Could not extract code or reasoning.");
+    throw new Error("Could not extract 'code' or 'reasoning'. Check formatting.");
   }
 
-  // Unescape any escaped quotes or characters, if needed
-  const rawCode = codeMatch[1].replace(/\\"/g, '"');
-  const reasoning = reasoningMatch[1].replace(/\\"/g, '"');
+  const code = codeMatch[1]; // full code with preserved whitespace
+  const reasoning = reasoningMatch[1].replace(/\\"/g, '"').trim();
 
-  return {
-    code: rawCode,
-    reasoning: reasoning.trim()
-  };
+  return { code, reasoning };
 }
 
 async function generateCode(ticketId) {
@@ -40,7 +43,7 @@ async function generateCode(ticketId) {
       },
       context: `Please respond ONLY in the following JSON format:
 {
-  "code": "<complete code block as a java code markdown>",
+  "code": "<complete code block>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
 Do not include any extra text outside the JSON.`
@@ -59,7 +62,7 @@ Do not include any extra text outside the JSON.`
       },
       context: `Please respond ONLY in the following JSON format:
 {
-  "code": "<complete test code block as a java code markdown>",
+  "code": "<complete test code block>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
 Do not include any extra text outside the JSON.`
@@ -103,11 +106,21 @@ async function refineCode(ticketId, prompt) {
       prompt
     });
 
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(response.data.code);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(response.data.tests);
+
+    // Update only code, tests and reasoning
     await Ticket.findByIdAndUpdate(ticketId, {
-      generatedCode: response.data.response
+      generatedCode,
+      testCases: generatedTests,
+      agentReasoning: {
+        codeGeneration: codeReasoning,
+        testGeneration: testReasoning,
+        timestamp: new Date().toISOString()
+      }
     });
 
-    return { success: true, message: 'Code refined successfully' };
+    return { success: true, message: 'Code and tests refined successfully' };
   } catch (error) {
     console.error('Code refinement failed:', error);
     return { success: false, error: error.message };
@@ -117,10 +130,21 @@ async function refineCode(ticketId, prompt) {
 // Cleanup session when ticket is deleted
 async function cleanupSession(ticketId) {
   try {
-    await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}`);
-    await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`);
+    // Delete main session
+    try {
+      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}`);
+    } catch (error) {
+      console.error('Main session cleanup failed:', error.message);
+    }
+
+    // Delete test session
+    try {
+      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`);
+    } catch (error) {
+      console.error('Test session cleanup failed:', error.message);
+    }
   } catch (error) {
-    console.error('Session cleanup failed:', error);
+    console.error('Session cleanup failed:', error.message);
   }
 }
 

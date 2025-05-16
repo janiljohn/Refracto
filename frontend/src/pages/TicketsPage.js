@@ -165,7 +165,15 @@ const TicketsPage = () => {
               <TicketForm mode="edit" ticket={selectedTicket} onSubmit={handleUpdate} onCancel={handleCancel} />
             )}
             {mode === 'view' && selectedTicket && (
-              <CodeDisplay ticket={selectedTicket} onDelete={handleDelete} onEdit={handleStartEdit} onUpdate={handleUpdate} />
+              <CodeDisplay 
+                ticket={selectedTicket} 
+                onDelete={handleDelete} 
+                onEdit={handleStartEdit} 
+                onUpdate={handleUpdate}
+                onStatusChange={(status) => {
+                  setSelectedTicket(prev => ({ ...prev, status }));
+                }}
+              />
             )}
             {mode === 'view' && !selectedTicket && (
               <Box
@@ -182,12 +190,6 @@ const TicketsPage = () => {
               </Box>
             )}
           </Box>
-
-          {mode === 'view' && selectedTicket && (
-            <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-              <ChatPrompt ticketId={selectedTicket._id} />
-            </Box>
-          )}
         </Box>
       </Box>
     </Box>

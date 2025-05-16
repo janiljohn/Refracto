@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon } from '@mui/icons-material';
+import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade, Snackbar, Alert } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon, ContentCopy as CopyIcon, Check as CheckIcon } from '@mui/icons-material';
 import { getStatusColor } from '../utils/statusUtils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MonacoEditor from '@monaco-editor/react';
+import ChatPrompt from './ChatPrompt';
 
 const GithubIcon = (props) => (
   <svg
@@ -79,7 +80,7 @@ const MonacoWrapper = ({ value, onChange, language = "java" }) => {
   );
 };
 
-const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
+const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => {
   const [editOpen, setEditOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [desc, setDesc] = useState(ticket.description);
@@ -89,8 +90,11 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
   const [testEdit, setTestEdit] = useState(ticket.testCases || testSample);
   const [editingCode, setEditingCode] = useState(false);
   const [editingTest, setEditingTest] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
   const editorRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
+  const [copyFeedback, setCopyFeedback] = useState({ open: false, message: '' });
+  const [copyState, setCopyState] = useState({ code: false, test: false });
 
   useEffect(() => {
     setCurrentTicket(ticket);
@@ -103,59 +107,21 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     });
   }, [ticket]);
 
-  // Poll for updates when status is pending or in_progress
-  useEffect(() => {
-    let interval;
-    const pollTicket = async () => {
-      try {
-        const response = await fetch(`/api/tickets/${currentTicket._id}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new TypeError("Response was not JSON");
-        }
-        const updatedTicket = await response.json();
-        console.log('Polled ticket data:', {
-          status: updatedTicket.status,
-          hasReasoning: !!updatedTicket.agentReasoning,
-          reasoning: updatedTicket.agentReasoning
-        });
-        setCurrentTicket(updatedTicket);
-        setCodeEdit(updatedTicket.generatedCode || codeSample);
-        setTestEdit(updatedTicket.testCases || testSample);
-        
-        // Only stop polling if we get a valid response and status is final
-        if (updatedTicket.status === 'completed' || updatedTicket.status === 'failed') {
-          console.log('Stopping poll - final status reached:', updatedTicket.status);
-          clearInterval(interval);
-        }
-      } catch (error) {
-        console.error('Error polling ticket status:', error);
-        // Don't clear interval on error, keep trying
-        // But log the error for debugging
-        if (error instanceof TypeError) {
-          console.error('Server returned non-JSON response');
-        }
-      }
-    };
-
-    // Start polling if ticket exists and status is not final
-    if (currentTicket?._id && currentTicket.status !== 'completed' && currentTicket.status !== 'failed') {
-      console.log('Starting poll for ticket:', currentTicket._id);
-      // Poll immediately and then every 2 seconds
-      pollTicket();
-      interval = setInterval(pollTicket, 2000);
+  const handleRefinementComplete = async () => {
+    try {
+      const response = await fetch(`/api/tickets/${currentTicket._id}`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const updatedTicket = await response.json();
+      setCurrentTicket(updatedTicket);
+      setCodeEdit(updatedTicket.generatedCode || codeSample);
+      setTestEdit(updatedTicket.testCases || testSample);
+    } catch (error) {
+      console.error('Error refreshing ticket:', error);
+    } finally {
+      setIsRefining(false);
     }
-
-    return () => {
-      if (interval) {
-        console.log('Cleaning up poll interval');
-        clearInterval(interval);
-      }
-    };
-  }, [currentTicket?._id, currentTicket?.status]);
+  };
 
   // Handle editor mount
   const handleEditorDidMount = (editor) => {
@@ -205,6 +171,21 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     onUpdate && onUpdate({ ...ticket, description: desc });
     setSaving(false);
     setEditOpen(false);
+  };
+
+  const handleCopy = async (text, type) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState(prev => ({ ...prev, [type]: true }));
+      setCopyFeedback({ open: true, message: `${type === 'code' ? 'Code' : 'Test'} copied to clipboard` });
+      setTimeout(() => setCopyState(prev => ({ ...prev, [type]: false })), 2000);
+    } catch (err) {
+      setCopyFeedback({ open: true, message: 'Failed to copy' });
+    }
+  };
+
+  const handleCloseFeedback = () => {
+    setCopyFeedback({ open: false, message: '' });
   };
 
   const renderLoadingState = () => (
@@ -341,14 +322,166 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
     );
   };
 
+  const renderCodeBlock = (content, type, isEditing, onEdit, onSave, onCancel) => (
+    <Paper
+      sx={{
+        height: 'calc((100vh - 180px) / 2)',
+        maxWidth: '100%',
+        bgcolor: '#1e1e1e',
+        color: '#d4d4d4',
+        fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontSize: '0.95rem',
+        border: '1px solid #333',
+        borderRadius: 2,
+        boxShadow: 'none',
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: '400px'
+      }}
+    >
+      {isEditing ? (
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <MonacoWrapper
+              value={content}
+              onChange={v => {
+                if (type === 'code') {
+                  setCodeEdit(v);
+                } else {
+                  setTestEdit(v);
+                }
+              }}
+              language="java"
+            />
+          </Box>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 1, 
+            p: 1, 
+            justifyContent: 'flex-end', 
+            bgcolor: '#23272e',
+            borderTop: '1px solid #333'
+          }}>
+            <Button
+              startIcon={<SaveIcon />}
+              variant="contained"
+              size="small"
+              onClick={() => {
+                setEditingCode(false);
+                setEditingTest(false);
+                onSave();
+              }}
+              sx={{ bgcolor: '#388e3c', color: '#fff', '&:hover': { bgcolor: '#256029' } }}
+            >
+              Save
+            </Button>
+            <Button
+              startIcon={<CancelIcon />}
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setEditingCode(false);
+                setEditingTest(false);
+                onCancel();
+              }}
+              sx={{ color: '#fff', borderColor: '#888' }}
+            >
+              Cancel
+            </Button>
+          </Box>
+        </Box>
+      ) : (
+        <Box sx={{ height: '100%', position: 'relative' }}>
+          <Box sx={{ 
+            position: 'absolute', 
+            top: 8, 
+            right: 8, 
+            zIndex: 2,
+            bgcolor: 'rgba(30,30,30,0.85)',
+            borderRadius: 1,
+            display: 'flex',
+            gap: 1
+          }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => handleCopy(content, type)}
+              startIcon={copyState[type] ? <CheckIcon /> : <CopyIcon />}
+              sx={{ 
+                color: copyState[type] ? '#4caf50' : '#fff', 
+                borderColor: copyState[type] ? '#4caf50' : '#888',
+                minWidth: 'auto',
+                px: 1
+              }}
+            >
+              {copyState[type] ? 'Copied' : 'Copy'}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={onEdit}
+              startIcon={<EditIcon />}
+              sx={{ color: '#fff', borderColor: '#888' }}
+            >
+              Edit
+            </Button>
+          </Box>
+          <Box sx={{ 
+            height: '100%', 
+            overflow: 'auto',
+            '& .syntax-highlighter': {
+              margin: 0,
+              height: '100%',
+              '& pre': {
+                margin: 0,
+                height: '100%'
+              }
+            }
+          }}>
+            <SyntaxHighlighter
+              language="java"
+              style={darkTheme}
+              showLineNumbers
+              customStyle={{ 
+                margin: 0, 
+                background: 'none', 
+                fontSize: '0.95rem', 
+                borderRadius: 0,
+                height: '100%'
+              }}
+              lineNumberStyle={{ 
+                minWidth: 32, 
+                color: '#858585', 
+                background: '#23272e', 
+                borderRight: '1px solid #222', 
+                padding: '0 8px',
+                position: 'sticky',
+                left: 0
+              }}
+            >
+              {content}
+            </SyntaxHighlighter>
+          </Box>
+        </Box>
+      )}
+    </Paper>
+  );
+
   const renderContent = () => (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: 3,
+      height: '100%',
+      position: 'relative',
+      pb: '100px'
+    }}>
       {/* Status indicator and Action buttons */}
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'space-between',
-        mb: 3,
+        mb: 2,
         '& .status-badge': {
           px: 2,
           py: 0.5,
@@ -395,246 +528,68 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
         gap: 3,
         maxWidth: '1800px', 
         mx: 'auto',
+        width: '100%',
         '& > div': {
           flex: 1,
-          minWidth: 0
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column'
         }
       }}>
         <Box>
           <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
             <span role="img" aria-label="code">&lt;/&gt;</span> Code Implementation:
+            {isRefining && <CircularProgress size={16} sx={{ ml: 1 }} />}
           </Typography>
-          <Paper
-            sx={{
-              height: '400px',
-              maxWidth: '100%',
-              bgcolor: '#1e1e1e',
-              color: '#d4d4d4',
-              fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-              fontSize: '0.95rem',
-              border: '1px solid #333',
-              borderRadius: 2,
-              boxShadow: 'none',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
-            {editingCode ? (
-              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  <MonacoWrapper
-                    value={codeEdit}
-                    onChange={v => setCodeEdit(v)}
-                    language="java"
-                  />
-                </Box>
-                <Box sx={{ 
-                  display: 'flex', 
-                  gap: 1, 
-                  p: 1, 
-                  justifyContent: 'flex-end', 
-                  bgcolor: '#23272e',
-                  borderTop: '1px solid #333'
-                }}>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    variant="contained"
-                    size="small"
-                    onClick={() => { setEditingCode(false); onUpdate && onUpdate({ ...ticket, generatedCode: codeEdit }); }}
-                    sx={{ bgcolor: '#388e3c', color: '#fff', '&:hover': { bgcolor: '#256029' } }}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    variant="outlined"
-                    size="small"
-                    onClick={() => { setEditingCode(false); setCodeEdit(ticket.generatedCode || codeSample); }}
-                    sx={{ color: '#fff', borderColor: '#888' }}
-                  >
-                    Cancel
-                  </Button>
-                </Box>
-              </Box>
-            ) : (
-              <Box sx={{ height: '100%', position: 'relative' }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 8, 
-                  right: 8, 
-                  zIndex: 2,
-                  bgcolor: 'rgba(30,30,30,0.85)',
-                  borderRadius: 1
-                }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => setEditingCode(true)}
-                    startIcon={<EditIcon />}
-                    sx={{ color: '#fff', borderColor: '#888' }}
-                  >
-                    Edit
-                  </Button>
-                </Box>
-                <Box sx={{ 
-                  height: '100%', 
-                  overflow: 'auto',
-                  '& .syntax-highlighter': {
-                    margin: 0,
-                    height: '100%',
-                    '& pre': {
-                      margin: 0,
-                      height: '100%'
-                    }
-                  }
-                }}>
-                  <SyntaxHighlighter
-                    language="java"
-                    style={darkTheme}
-                    showLineNumbers
-                    customStyle={{ 
-                      margin: 0, 
-                      background: 'none', 
-                      fontSize: '0.95rem', 
-                      borderRadius: 0,
-                      height: '100%'
-                    }}
-                    lineNumberStyle={{ 
-                      minWidth: 32, 
-                      color: '#858585', 
-                      background: '#23272e', 
-                      borderRight: '1px solid #222', 
-                      padding: '0 8px',
-                      position: 'sticky',
-                      left: 0
-                    }}
-                  >
-                    {codeEdit}
-                  </SyntaxHighlighter>
-                </Box>
-              </Box>
-            )}
-          </Paper>
+          {renderCodeBlock(
+            codeEdit,
+            'code',
+            editingCode,
+            () => setEditingCode(true),
+            () => { setEditingCode(false); onUpdate && onUpdate({ ...ticket, generatedCode: codeEdit }); },
+            () => { setEditingCode(false); setCodeEdit(ticket.generatedCode || codeSample); }
+          )}
         </Box>
 
         <Box>
           <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
             <span role="img" aria-label="test">&#123;&#125;</span> Test case Implementation:
+            {isRefining && <CircularProgress size={16} sx={{ ml: 1 }} />}
           </Typography>
-          <Paper
-            sx={{
-              height: '400px',
-              maxWidth: '100%',
-              bgcolor: '#1e1e1e',
-              color: '#d4d4d4',
-              fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-              fontSize: '0.95rem',
-              border: '1px solid #333',
-              borderRadius: 2,
-              boxShadow: 'none',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
-            {editingTest ? (
-              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                  <MonacoWrapper
-                    value={testEdit}
-                    onChange={v => setTestEdit(v)}
-                    language="java"
-                  />
-                </Box>
-                <Box sx={{ 
-                  display: 'flex', 
-                  gap: 1, 
-                  p: 1, 
-                  justifyContent: 'flex-end', 
-                  bgcolor: '#23272e',
-                  borderTop: '1px solid #333'
-                }}>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    variant="contained"
-                    size="small"
-                    onClick={() => { setEditingTest(false); onUpdate && onUpdate({ ...ticket, testCases: testEdit }); }}
-                    sx={{ bgcolor: '#388e3c', color: '#fff', '&:hover': { bgcolor: '#256029' } }}
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    variant="outlined"
-                    size="small"
-                    onClick={() => { setEditingTest(false); setTestEdit(ticket.testCases || testSample); }}
-                    sx={{ color: '#fff', borderColor: '#888' }}
-                  >
-                    Cancel
-                  </Button>
-                </Box>
-              </Box>
-            ) : (
-              <Box sx={{ height: '100%', position: 'relative' }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 8, 
-                  right: 8, 
-                  zIndex: 2,
-                  bgcolor: 'rgba(30,30,30,0.85)',
-                  borderRadius: 1
-                }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => setEditingTest(true)}
-                    startIcon={<EditIcon />}
-                    sx={{ color: '#fff', borderColor: '#888' }}
-                  >
-                    Edit
-                  </Button>
-                </Box>
-                <Box sx={{ 
-                  height: '100%', 
-                  overflow: 'auto',
-                  '& .syntax-highlighter': {
-                    margin: 0,
-                    height: '100%',
-                    '& pre': {
-                      margin: 0,
-                      height: '100%'
-                    }
-                  }
-                }}>
-                  <SyntaxHighlighter
-                    language="java"
-                    style={darkTheme}
-                    showLineNumbers
-                    customStyle={{ 
-                      margin: 0, 
-                      background: 'none', 
-                      fontSize: '0.95rem', 
-                      borderRadius: 0,
-                      height: '100%'
-                    }}
-                    lineNumberStyle={{ 
-                      minWidth: 32, 
-                      color: '#858585', 
-                      background: '#23272e', 
-                      borderRight: '1px solid #222', 
-                      padding: '0 8px',
-                      position: 'sticky',
-                      left: 0
-                    }}
-                  >
-                    {testEdit}
-                  </SyntaxHighlighter>
-                </Box>
-              </Box>
-            )}
-          </Paper>
+          {renderCodeBlock(
+            testEdit,
+            'test',
+            editingTest,
+            () => setEditingTest(true),
+            () => { setEditingTest(false); onUpdate && onUpdate({ ...ticket, testCases: testEdit }); },
+            () => { setEditingTest(false); setTestEdit(ticket.testCases || testSample); }
+          )}
         </Box>
       </Box>
       
+      {/* Chat Prompt */}
+      <Box sx={{ 
+        position: 'fixed',
+        bottom: 0,
+        left: '320px',
+        right: 0,
+        p: 2,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        zIndex: 1000,
+        boxShadow: '0px -2px 4px rgba(0,0,0,0.05)'
+      }}>
+        <Box sx={{ maxWidth: '1800px', mx: 'auto', px: 3 }}>
+          <ChatPrompt 
+            key={currentTicket._id}
+            ticketId={currentTicket._id}
+            onRefinementComplete={handleRefinementComplete}
+            onLoadingChange={setIsRefining}
+          />
+        </Box>
+      </Box>
+
       <Box sx={{ 
         display: 'flex', 
         flexDirection: 'column',
@@ -730,6 +685,22 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit }) => {
       </Box>
 
       {renderTerminal()}
+
+      <Snackbar
+        open={copyFeedback.open}
+        autoHideDuration={2000}
+        onClose={handleCloseFeedback}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseFeedback} 
+          severity="success" 
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {copyFeedback.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 

@@ -3,7 +3,7 @@ import { Box, TextField, Button, CircularProgress } from '@mui/material';
 import { Send as SendIcon } from '@mui/icons-material';
 import { refineTicket } from '../utils/api';
 
-const ChatPrompt = ({ ticketId, onRefinementComplete }) => {
+const ChatPrompt = ({ ticketId, onRefinementComplete, onLoadingChange }) => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -14,6 +14,7 @@ const ChatPrompt = ({ ticketId, onRefinementComplete }) => {
 
     setLoading(true);
     setError('');
+    onLoadingChange?.(true);
 
     try {
       await refineTicket(ticketId, prompt);
@@ -23,6 +24,7 @@ const ChatPrompt = ({ ticketId, onRefinementComplete }) => {
       setError(err.message);
     } finally {
       setLoading(false);
+      onLoadingChange?.(false);
     }
   };
 

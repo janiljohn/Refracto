@@ -2,6 +2,8 @@ import express from 'express';
 import { spawn } from 'node:child_process';
 import { log } from 'node:console';
 import stripAnsi from 'strip-ansi';
+import Session from '../models/Session.js';
+import connectDB from '../config/db.js';
 
 import 'dotenv/config'
 const app = express();
@@ -9,8 +11,29 @@ app.use(express.json());
 
 const GOOSE_WORKING_DIR = process.env.GOOSE_WORKING_DIR
 log("GOOSE_WORKING_DIR:", GOOSE_WORKING_DIR);
-// Session management
-const activeSessions = new Map();
+
+// Connect to MongoDB before starting server
+let isDBConnected = false;
+
+// Initialize server only after DB connection
+const startServer = async () => {
+    try {
+        await connectDB();
+        isDBConnected = true;
+        log("MongoDB connected for goose service");
+
+        const PORT = process.env.GOOSE_SERVICE_PORT || 8080;
+        app.listen(PORT, '0.0.0.0', () => {
+            log(`Goose service running on http://0.0.0.0:${PORT}`);
+        });
+    } catch (err) {
+        log("MongoDB connection failed:", err);
+        process.exit(1);
+    }
+};
+
+// Start the server
+startServer();
 
 // Helper to clean output
 const cleanOutput = (output) => {
@@ -30,18 +53,28 @@ const cleanOutput = (output) => {
 
 // Create or get session
 const getOrCreateSession = async (sessionId) => {
-    if (activeSessions.has(sessionId)) {
-        return activeSessions.get(sessionId);
+    if (!isDBConnected) {
+        throw new Error("Database not connected");
     }
-
-    const sessionName = `session_${sessionId}`;
-    const session = {
-        id: sessionId,
-        name: sessionName,
-        history: []
-    };
-    activeSessions.set(sessionId, session);
-    return session;
+    
+    try {
+        let session = await Session.findOne({ sessionId });
+        
+        if (!session) {
+            const sessionName = `session_${sessionId}`;
+            session = new Session({
+                sessionId,
+                name: sessionName,
+                history: []
+            });
+            await session.save();
+        }
+        
+        return session;
+    } catch (error) {
+        console.error('Session error:', error);
+        throw error;
+    }
 };
 
 // Execute goose command
@@ -82,15 +115,32 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
         proc.stdout.on('data', (data) => stdout += data);
         proc.stderr.on('data', (data) => stderr += data);
 
-        proc.on('close', (code) => {
+        proc.on('close', async (code) => {
             if (code !== 0) {
                 reject(new Error(stderr));
             } else {
                 const parsedOutput = cleanOutput(stdout);
-                session.history.push({ role: 'user', content: prompt });
-                session.history.push({ role: 'assistant', content: parsedOutput });
+                
+                // Update session history in MongoDB
+                session.history.push({ 
+                    role: 'user', 
+                    content: prompt,
+                    timestamp: new Date()
+                });
+                session.history.push({ 
+                    role: 'assistant', 
+                    content: parsedOutput,
+                    timestamp: new Date()
+                });
+                
+                try {
+                    await session.save();
+                } catch (error) {
+                    console.error('Failed to save session:', error);
+                }
+                
                 resolve(parsedOutput);
-                proc.kill()
+                proc.kill();
             }
         });
 
@@ -141,9 +191,30 @@ app.post('/refine', async (req, res) => {
     
     try {
         const session = await getOrCreateSession(sessionId);
-        const response = await executeGooseCommand(session, prompt);
+        const context = `Please respond ONLY in the following JSON format:
+{
+  "code": "<complete code block as a java code markdown>",
+  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+}
+Do not include any extra text outside the JSON.`;
+
+        const fullPrompt = `${context}\n\nRefine the following code based on this request: ${prompt}`;
+        const response = await executeGooseCommand(session, fullPrompt);
+        
+        // Generate test cases
+        const testContext = `Please respond ONLY in the following JSON format:
+{
+  "code": "<complete test code block as a java code markdown>",
+  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+}
+Do not include any extra text outside the JSON.`;
+
+        const testPrompt = `${testContext}\n\nGenerate test cases for the refined code: ${prompt}`;
+        const testResponse = await executeGooseCommand(session, testPrompt);
+
         res.json({ 
-            response,
+            code: response,
+            tests: testResponse,
             sessionId: session.id,
             history: session.history
         });
@@ -152,42 +223,63 @@ app.post('/refine', async (req, res) => {
     }
 });
 
-// app.delete('/session/:sessionId', (req, res) => {
-//     const { sessionId } = req.params;
-//     activeSessions.delete(sessionId);
-//     res.json({ message: 'Session deleted' });
-// });
-
-app.delete('/session/:sessionId', (req, res) => {
+app.delete('/session/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
-    const session = activeSessions.get(sessionId);
-
-    if (!session) {
-        return res.status(404).json({ message: 'Session not found' });
+    
+    if (!isDBConnected) {
+        return res.status(503).json({ error: 'Database not connected. Please try again.' });
     }
+    
+    try {
+        const session = await Session.findOne({ sessionId });
+        if (!session) {
+            // If session not found in DB, still try to remove goose session
+            const proc = spawn('goose', ['session', 'remove', '-i', `session_${sessionId}`], {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
 
-    const proc = spawn('goose', ['session', 'remove', '-i', session.name], {
-        stdio: ['ignore', 'pipe', 'pipe']
-    });
+            let stdout = '';
+            let stderr = '';
 
-    let stdout = '';
-    let stderr = '';
+            proc.stdout.on('data', (data) => stdout += data);
+            proc.stderr.on('data', (data) => stderr += data);
 
-    proc.stdout.on('data', (data) => stdout += data);
-    proc.stderr.on('data', (data) => stderr += data);
-
-    proc.on('close', (code) => {
-        activeSessions.delete(sessionId);
-        if (code !== 0) {
-            return res.status(500).json({ error: stderr });
+            proc.on('close', (code) => {
+                if (code !== 0) {
+                    return res.status(404).json({ message: 'Session not found' });
+                }
+                res.json({ message: 'Goose session removed', output: stdout });
+            });
+            return;
         }
-        res.json({ message: 'Session deleted', output: stdout });
-    });
-});
 
-const PORT = process.env.GOOSE_SERVICE_PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Goose service running on http://0.0.0.0:${PORT}`);
+        const proc = spawn('goose', ['session', 'remove', '-i', session.name], {
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout.on('data', (data) => stdout += data);
+        proc.stderr.on('data', (data) => stderr += data);
+
+        proc.on('close', async (code) => {
+            if (code !== 0) {
+                return res.status(500).json({ error: stderr });
+            }
+            
+            try {
+                await Session.deleteOne({ sessionId });
+                res.json({ message: 'Session deleted', output: stdout });
+            } catch (error) {
+                console.error('Failed to delete session from database:', error);
+                res.status(500).json({ error: 'Failed to delete session from database' });
+            }
+        });
+    } catch (error) {
+        console.error('Session deletion error:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 export { getOrCreateSession, executeGooseCommand }; 
