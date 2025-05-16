@@ -123,6 +123,27 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
     }
   };
 
+  const handleApproveAndApply = async () => {
+    try {
+      setIsRefining(true);
+      const response = await fetch(`/api/tickets/${currentTicket._id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+      const updatedTicket = await response.json();
+      setCurrentTicket(updatedTicket);
+    } catch (error) {
+      console.error('Error approving and applying:', error);
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
   // Handle editor mount
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
@@ -601,6 +622,8 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
       }}>
         <Button
           variant="contained"
+          onClick={handleApproveAndApply}
+          disabled={isRefining}
           sx={{
             borderRadius: 2,
             textTransform: 'none',
@@ -618,10 +641,14 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
                 width: 'auto',
                 ml: 1
               }
+            },
+            '&.Mui-disabled': {
+              bgcolor: 'rgba(176,176,176,0.5)',
+              color: 'rgba(255,255,255,0.7)'
             }
           }}
         >
-          <GithubIcon />
+          {isRefining ? <CircularProgress size={20} color="inherit" /> : <GithubIcon />}
           <Typography 
             className="button-text"
             sx={{ 

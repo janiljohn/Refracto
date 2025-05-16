@@ -26,8 +26,8 @@ function extractCodeAndReasoningLoosely(rawText) {
 
 async function handleApproveAndApply(ticketId) {
   try {
-    // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
-    const ticket = await Ticket.findById(ticketId);
+    // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
+    // const ticket = await Ticket.findById(ticketId);
 
     // Generate code using goose service
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
@@ -266,6 +266,23 @@ ticketController = {
       res.json({ message: 'Ticket deleted' });
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  },
+
+  // Approve and apply ticket
+  approveTicket: async (req, res) => {
+    try {
+      const ticket = await Ticket.findById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+      await handleApproveAndApply(ticket._id);
+      
+      // Fetch updated ticket
+      const updatedTicket = await Ticket.findById(ticket._id);
+      res.json(updatedTicket);
+    } catch (err) {
+      console.error('Approve and apply failed:', err);
+      res.status(500).json({ error: err.message });
     }
   }
 };
