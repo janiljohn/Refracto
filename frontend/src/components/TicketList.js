@@ -6,12 +6,17 @@ import {
   CardActionArea,
   CardContent,
   Chip,
-  Tooltip
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import { 
   FiberManualRecord as StatusIcon,
   AccessTime as TimeIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Sort as SortIcon
 } from '@mui/icons-material';
 import { getTickets } from '../utils/api';
 import { differenceInHours, differenceInDays, differenceInWeeks } from 'date-fns';
@@ -75,8 +80,38 @@ const formatTimeAgo = (date) => {
   return 'now';
 };
 
+const sortOptions = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'title_asc', label: 'Title A-Z' },
+  { value: 'title_desc', label: 'Title Z-A' },
+  { value: 'status', label: 'Status' }
+];
+
+const sortTickets = (tickets, sortBy) => {
+  const sorted = [...tickets];
+  switch (sortBy) {
+    case 'newest':
+      return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    case 'oldest':
+      return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    case 'title_asc':
+      return sorted.sort((a, b) => a.title.localeCompare(b.title));
+    case 'title_desc':
+      return sorted.sort((a, b) => b.title.localeCompare(a.title));
+    case 'status':
+      return sorted.sort((a, b) => {
+        const statusOrder = { new: 0, in_progress: 1, completed: 2, failed: 3 };
+        return statusOrder[a.status] - statusOrder[b.status];
+      });
+    default:
+      return sorted;
+  }
+};
+
 const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
   const [tickets, setTickets] = useState([]);
+  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
     getTickets().then(setTickets);
@@ -89,9 +124,38 @@ const TicketList = ({ onSelectTicket, selectedTicket, refresh, search }) => {
       )
     : tickets;
 
+  const sortedTickets = sortTickets(filtered, sortBy);
+
   return (
     <Box sx={{ px: 2, pt: 2, overflowY: 'auto', height: 'calc(100vh - 120px)' }}>
-      {filtered.map((ticket) => (
+      <Box sx={{ 
+        display: 'flex', 
+        width: '100%',
+        mb: 2,
+        alignItems: 'center',
+        gap: 1
+      }}>
+        <FormControl size="small" sx={{ width: '100%' }}>
+          <InputLabel>Sort By</InputLabel>
+          <Select
+            value={sortBy}
+            label="Sort By"
+            onChange={(e) => setSortBy(e.target.value)}
+            startAdornment={<SortIcon sx={{ color: 'text.secondary', fontSize: 20, mr: 1 }} />}
+            sx={{ 
+              bgcolor: 'background.paper',
+              '& .MuiSelect-select': { py: 1 }
+            }}
+          >
+            {sortOptions.map(option => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+      {sortedTickets.map((ticket) => (
         <Card
           key={ticket._id}
           elevation={selectedTicket?._id === ticket._id ? 6 : 1}
