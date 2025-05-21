@@ -11,7 +11,7 @@ function extractCodeAndReasoningLoosely(rawText) {
     .join('\n');
 
   // Extract code inside ```java ... ```
-  const codeMatch = cleanedText.match(/"code":\s*```(?:java)?\n([\s\S]*?)```/);
+  const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds)?\n([\s\S]*?)```/);
   const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
   if (!codeMatch || !reasoningMatch) {
@@ -211,6 +211,18 @@ ticketController = {
     try {
       const ticket = await Ticket.findById(req.params.id);
       if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+      res.json(ticket);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+
+  // Git stuff
+  handleApprove: async (req, res) => {
+    try {
+      const ticket = await Ticket.findById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+      handleApproveAndApply(ticket._id);
       res.json(ticket);
     } catch (err) {
       res.status(500).json({ error: err.message });
