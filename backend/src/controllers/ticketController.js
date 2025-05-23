@@ -3,6 +3,11 @@ const axios = require('axios');
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://localhost:8080';
 
+const axiosConfig = {
+  timeout: 300000 // Set timeout to 5 mins
+};
+
+
 function extractCodeAndReasoningLoosely(rawText) {
   // Clean up: remove any "Goose Response:" prefixes
   const cleanedText = rawText
@@ -11,7 +16,8 @@ function extractCodeAndReasoningLoosely(rawText) {
     .join('\n');
 
   // Extract code inside ```java ... ```
-  const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds)?\n([\s\S]*?)```/);
+  // const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds)?\n([\s\S]*?)```/);
+  const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"/);
   const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
   if (!codeMatch || !reasoningMatch) {
@@ -27,7 +33,7 @@ function extractCodeAndReasoningLoosely(rawText) {
 async function handleApproveAndApply(ticketId) {
   try {
     // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
-    // const ticket = await Ticket.findById(ticketId);
+    const ticket = await Ticket.findById(ticketId);
 
     // Generate code using goose service
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
@@ -50,7 +56,7 @@ async function handleApproveAndApply(ticketId) {
    - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
    - Add inline comments summarizing the core logic updates.
 Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
-    });
+    }, axiosConfig);
 
     console.log('Goose Response:', codeResponse.data.response);
     // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
@@ -96,7 +102,7 @@ async function gooseGit(ticketId) {
         error: error.message,
         timestamp: new Date().toISOString()
       }
-    });
+    }, axiosConfig);
   }
 }
 
@@ -110,7 +116,7 @@ async function generateCode(ticketId) {
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
       prompt: {
-        task: "Implement the following ticket details to create the required functionality.",
+        task: "Implement the following ticket details to create the required functionality and apply the changes to the relevant files in the project.",
         intent: ticket.intent,
         notes: ticket.notes,
         cds: ticket.cds,
@@ -118,13 +124,13 @@ async function generateCode(ticketId) {
         rules: ticket.rules,
         output: ticket.output
       },
-      context: `Please respond ONLY in the following JSON format:
+      context: `Respond exactly in the following JSON format:
 {
-  "code": "<complete code block>",
+  "code": "<complete code block in java>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
 Do not include any extra text outside the JSON.`
-    });
+    }, axiosConfig);
 
     console.log('Goose Response:', codeResponse.data.response);
     const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
@@ -159,7 +165,7 @@ Do not include any extra text outside the JSON.`
         testGeneration: testReasoning,
         timestamp: new Date().toISOString()
       }
-    });
+    }, axiosConfig);
 
   } catch (error) {
     console.error('Code generation failed:', error);
@@ -265,9 +271,16 @@ ticketController = {
       console.log('Received body:', req.body);
       const ticket = new Ticket(req.body);
       await ticket.save();
-      gooseGit(ticket._id);
-      // Kick off async code generation
-      generateCode(ticket._id);
+      try {
+        console.log('Calling gooseGit...');
+        await gooseGit(ticket._id);
+        console.log('gooseGit completed.');      } catch (error) {
+        console.error('Error in gooseGit:', error);
+      }      // Kick off async code generation
+      console.log('Initiating code gen...');
+      await generateCode(ticket._id);
+      console.log('Code Gen Completed!');
+
       res.status(201).json(ticket);
     } catch (err) {
       res.status(400).json({ error: err.message });
