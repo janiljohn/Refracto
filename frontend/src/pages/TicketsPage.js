@@ -81,15 +81,30 @@ const TicketsPage = () => {
       {/* Header */}
       <AppBar position="static" elevation={1} sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', zIndex: 1201 }}>
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none' }} onClick={() => navigate('/')}> 
-            <img src="/ricon.png" alt="Logo" style={{ height: 32, width: 32, marginRight: 8 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0, cursor: 'pointer', userSelect: 'none' }} onClick={() => navigate('/')}> 
+            <img 
+              src="/ricon.svg" 
+              alt="Logo" 
+              style={{ 
+                height: 36, 
+                width: 36, 
+                marginRight: 4,
+                filter: 'brightness(0)'
+              }} 
+            />
             <Typography
               variant="h5"
-              fontWeight={700}
+              fontWeight={600}
               color="primary"
-              sx={{ letterSpacing: 1 }}
+              sx={{ 
+                letterSpacing: 0.5,
+                fontSize: '1.5rem',
+                fontFamily: '"Inter", sans-serif',
+                ml: 0,
+                mt: 0.5
+              }}
             >
-              Refracto
+              efracto
             </Typography>
           </Box>
           <TextField
