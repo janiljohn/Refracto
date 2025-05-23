@@ -4,7 +4,7 @@ const Ticket = require('../models/Ticket');
 const fetch = require('node-fetch');
 // import fetch from 'node-fetch'
 
-const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://localhost:8080';
+const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://0.0.0.0:8080';
 
 const axiosConfig = {
   timeout: 300000 // Set timeout to 5 mins
@@ -12,11 +12,12 @@ const axiosConfig = {
 
 
 function extractCodeAndReasoningLoosely(rawText) {
-  // Clean up: remove any "Goose Response:" prefixes
+  // Clean up: remove any "Goose Response:" prefixes and extra whitespace
   const cleanedText = rawText
     .split('\n')
     .filter(line => !line.startsWith('Goose Response:'))
-    .join('\n');
+    .join('\n')
+    .trim();
 
   // Extract code inside ```java ... ```
     // Extract code as a plain string
@@ -30,12 +31,20 @@ function extractCodeAndReasoningLoosely(rawText) {
   // const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
   if (!codeMatch || !reasoningMatch) {
+    console.error('Failed to match patterns. Text received:', cleanedText);
     throw new Error("Could not extract 'code' or 'reasoning'. Check formatting.");
   }
 
-  const code = codeMatch[1]; // full code with preserved whitespace
+  // Extract and clean the code and reasoning
+  const code = codeMatch[1]
+    .replace(/\\"/g, '"')  // Unescape quotes
+    .replace(/\\n/g, '\n') // Convert \n to actual newlines
+    .trim();
+    
   const reasoning = reasoningMatch[1]
-  // .replace(/\\"/g, '"').trim();
+    .replace(/\\"/g, '"')  // Unescape quotes
+    .replace(/\\n/g, '\n') // Convert \n to actual newlines
+    .trim();
 
   return { code, reasoning };
 }
@@ -182,13 +191,41 @@ async function generateCode(ticketId) {
         rules: ticket.rules,
         output: ticket.output
       },
-      context: `Respond exactly in the following JSON format:
+      context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+
 {
-  "code": "<complete code block in java>",
-  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+  "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
+  "reasoning": "<concise narrative explanation in plain text, using this structure:
+
+Files read
+- file1.ext
+- file2.ext
+
+Files changed
+- file3.ext
+- file4.ext
+
+file3.ext – what & why
+- Change 1 — one-line reason
+- Change 2 — one-line reason
+- …
+
+file4.ext – what & why
+- Change 1 — one-line reason
+- …
+
+Net result
+Brief, one-sentence summary of the overall benefit.>"
 }
-Do not include any extra text outside the JSON.`
-    }, axiosConfig);
+
+Formatting rules for the **reasoning** field  
+• Use the section headers exactly as shown: "Files read", "Files changed", each "<filename> – what & why", and "Net result".  
+• Under each header, use short dash bullets (-) for maximum clarity; keep each bullet to a single sentence.  
+• Match the succinct style of this prompt—no tables, no long prose paragraphs.
+
+Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+`
+    });
 
     console.log('Goose Response:', codeResponse.data.response);
     const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
@@ -201,12 +238,40 @@ Do not include any extra text outside the JSON.`
       prompt: {
         task: "Generate test cases for the generated SAP CAP Java code. "
       },
-      context: `Please respond ONLY in the following JSON format:
+      context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+
 {
-  "code": "<complete test code block>",
-  "reasoning": "<clear explanation of how and why this code was implemented this way>"
+  "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
+  "reasoning": "<concise narrative explanation in plain text, using this structure:
+
+Files read
+- file1.ext
+- file2.ext
+
+Files changed
+- file3.ext
+- file4.ext
+
+file3.ext – what & why
+- Change 1 — one-line reason
+- Change 2 — one-line reason
+- …
+
+file4.ext – what & why
+- Change 1 — one-line reason
+- …
+
+Net result
+Brief, one-sentence summary of the overall benefit.>"
 }
-Do not include any extra text outside the JSON.`
+
+Formatting rules for the **reasoning** field  
+• Use the section headers exactly as shown: "Files read", "Files changed", each "<filename> – what & why", and "Net result".  
+• Under each header, use short dash bullets (-) for maximum clarity; keep each bullet to a single sentence.  
+• Match the succinct style of this prompt—no tables, no long prose paragraphs.
+
+Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+`
     });
 
     console.log('Goose Test Response:', testResponse.data.response);
@@ -305,18 +370,6 @@ ticketController = {
     try {
       const ticket = await Ticket.findById(req.params.id);
       if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-      res.json(ticket);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  // Git stuff
-  handleApprove: async (req, res) => {
-    try {
-      const ticket = await Ticket.findById(req.params.id);
-      if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-      handleApproveAndApply(ticket._id);
       res.json(ticket);
     } catch (err) {
       res.status(500).json({ error: err.message });
