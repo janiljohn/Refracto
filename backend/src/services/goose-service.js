@@ -180,6 +180,30 @@ app.post('/approve', async (req, res) => {
     }
 })
 
+app.post('/gooseGit', async (req, res) => {
+    const { sessionId, prompt, context } = req.body;
+    
+    const task = prompt.task != '' ? `${prompt.task}` : '';
+    const fullPrompt = [task, context]
+        .filter(Boolean)
+        .join(' ');
+
+    console.log("//////////////////////")
+    console.log('Git Prompt in goose backend:', fullPrompt);
+    console.log("//////////////////////")
+    
+    try {
+        const session = await getOrCreateSession(sessionId);
+        const response = await executeGooseCommand(session, fullPrompt);
+        res.json({ 
+            response,
+            sessionId: session.id,
+            history: session.history
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // API Endpoints
 app.post('/generate', async (req, res) => {    

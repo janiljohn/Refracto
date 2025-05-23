@@ -70,6 +70,36 @@ Output each Git command you would run, then the PR payload or CLI command you'd 
   }
 }
 
+async function gooseGit(ticketId) {
+  try {
+    // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
+    // const ticket = await Ticket.findById(ticketId);
+
+    // Generate code using goose service
+    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/gooseGit`, {
+      sessionId: ticketId,
+      prompt: {
+        task: "Perform the following Git operations"
+      },
+      context: `Create and switch to a new branch named feature/${ticketId}.`
+    });
+
+    console.log('Goose Response:', codeResponse.data.response);
+
+} catch (error) {
+    console.error('Code Push operation failed:', error);
+    await Ticket.findByIdAndUpdate(ticketId, { 
+      status: 'failed',
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+}
+
 
 async function generateCode(ticketId) {
   try {
@@ -80,7 +110,7 @@ async function generateCode(ticketId) {
     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
       sessionId: ticketId,
       prompt: {
-        task: "Generate SAP CAP Java implementation based on the following ticket details:",
+        task: "Implement the following ticket details to create the required functionality.",
         intent: ticket.intent,
         notes: ticket.notes,
         cds: ticket.cds,
@@ -235,6 +265,7 @@ ticketController = {
       console.log('Received body:', req.body);
       const ticket = new Ticket(req.body);
       await ticket.save();
+      gooseGit(ticket._id);
       // Kick off async code generation
       generateCode(ticket._id);
       res.status(201).json(ticket);
