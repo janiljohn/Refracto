@@ -1,5 +1,8 @@
 const Ticket = require('../models/Ticket');
-const axios = require('axios');
+// import Ticket from '../models/Ticket';
+// const axios = require('axios');
+const fetch = require('node-fetch');
+// import fetch from 'node-fetch'
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://0.0.0.0:8080';
 
@@ -17,9 +20,15 @@ function extractCodeAndReasoningLoosely(rawText) {
     .trim();
 
   // Extract code inside ```java ... ```
-  // const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds)?\n([\s\S]*?)```/);
-  const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"/);
-  const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+    // Extract code as a plain string
+    const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)",/);
+
+    // Extract reasoning as a plain string
+    const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+  
+  // const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds|json)?\n([\s\S]*?)```/);
+  // const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"/);
+  // const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
 
   if (!codeMatch || !reasoningMatch) {
     console.error('Failed to match patterns. Text received:', cleanedText);
@@ -46,27 +55,57 @@ async function handleApproveAndApply(ticketId) {
     const ticket = await Ticket.findById(ticketId);
 
     // Generate code using goose service
-    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
-      sessionId: ticketId,
-      prompt: {
-        task: "Perform the following Git operations based on the ticket details:",
-        intent: ticket.intent,
-        // notes: ticket.notes,
-        // cds: ticket.cds,
-        // trigger: ticket.trigger,
-        // rules: ticket.rules,
-        // output: ticket.output
+    const response = await fetch(`${GOOSE_SERVICE_URL}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Add any additional headers if needed
       },
-      context: `1. Create and switch to a new branch named feature/${ticketId}.
-2. Stage all modified and new files.
-3. Commit them with appropriate message based on the requirements.
-4. Push the branch to the remote ${ticket.githubUrl}.
-5. Open a pull request against main:
-   - Title: same as the commit message.
-   - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
-   - Add inline comments summarizing the core logic updates.
-Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
-    }, axiosConfig);
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Perform the following Git operations based on the ticket details:",
+          intent: ticket.intent,
+          // notes: ticket.notes,
+          // cds: ticket.cds,
+          // trigger: ticket.trigger,
+          // rules: ticket.rules,
+          // output: ticket.output
+        },
+        context: `1. Create and switch to a new branch named feature/${ticketId}.
+    2. Stage all modified and new files.
+    3. Commit them with appropriate message based on the requirements.
+    4. Push the branch to the remote ${ticket.githubUrl}.
+    5. Open a pull request against main:
+       - Title: same as the commit message.
+       - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+       - Add inline comments summarizing the core logic updates.
+    Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+      })
+    });
+    
+//     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
+//       sessionId: ticketId,
+//       prompt: {
+//         task: "Perform the following Git operations based on the ticket details:",
+//         intent: ticket.intent,
+//         // notes: ticket.notes,
+//         // cds: ticket.cds,
+//         // trigger: ticket.trigger,
+//         // rules: ticket.rules,
+//         // output: ticket.output
+//       },
+//       context: `1. Create and switch to a new branch named feature/${ticketId}.
+// 2. Stage all modified and new files.
+// 3. Commit them with appropriate message based on the requirements.
+// 4. Push the branch to the remote ${ticket.githubUrl}.
+// 5. Open a pull request against main:
+//    - Title: same as the commit message.
+//    - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+//    - Add inline comments summarizing the core logic updates.
+// Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+//     }, axiosConfig);
+    const codeResponse = await response.json();
 
     console.log('Goose Response:', codeResponse.data.response);
     // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
@@ -92,15 +131,33 @@ async function gooseGit(ticketId) {
     // const ticket = await Ticket.findById(ticketId);
 
     // Generate code using goose service
-    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/gooseGit`, {
-      sessionId: ticketId,
-      prompt: {
-        task: "Perform the following Git operations"
+    const response = await fetch(`${GOOSE_SERVICE_URL}/gooseGit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      context: `Create and switch to a new branch named feature/${ticketId}.`
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Perform the following Git operations"
+        },
+        context: `Create and switch to a new branch named feature/${ticketId}.`
+      })
     });
+    
+    const codeResponse = await response.json();
 
-    console.log('Goose Response:', codeResponse.data.response);
+    console.log('Goose Response:', codeResponse);
+    
+    // const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/gooseGit`, {
+    //   sessionId: ticketId,
+    //   prompt: {
+    //     task: "Perform the following Git operations"
+    //   },
+    //   context: `Create and switch to a new branch named feature/${ticketId}.`
+    // });
+
+    console.log('Goose Response:', codeResponse.response);
 
 } catch (error) {
     console.error('Code Push operation failed:', error);
@@ -112,7 +169,7 @@ async function gooseGit(ticketId) {
         error: error.message,
         timestamp: new Date().toISOString()
       }
-    }, axiosConfig);
+  });
   }
 }
 
@@ -331,9 +388,9 @@ ticketController = {
         console.log('gooseGit completed.');      } catch (error) {
         console.error('Error in gooseGit:', error);
       }      // Kick off async code generation
-      console.log('Initiating code gen...');
-      await generateCode(ticket._id);
-      console.log('Code Gen Completed!');
+      // console.log('Initiating code gen...');
+      // await generateCode(ticket._id);
+      // console.log('Code Gen Completed!');
 
       res.status(201).json(ticket);
     } catch (err) {
