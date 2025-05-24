@@ -72,15 +72,12 @@ async function handleApproveAndApply(ticketId) {
           // rules: ticket.rules,
           // output: ticket.output
         },
-        context: `1. Create and switch to a new branch named feature/${ticketId}.
-    2. Stage all modified and new files.
-    3. Commit them with appropriate message based on the requirements.
-    4. Push the branch to the remote ${ticket.githubUrl}.
-    5. Open a pull request against main:
-       - Title: same as the commit message.
-       - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
-       - Add inline comments summarizing the core logic updates.
-    Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+        context: `1. Push the branch to the remote ${ticket.githubUrl}.
+2. Open a pull request against main:
+- Title: same as the commit message.
+- Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+- Add inline comments summarizing the core logic updates.
+Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
       })
     });
     
@@ -107,12 +104,12 @@ async function handleApproveAndApply(ticketId) {
 //     }, axiosConfig);
     const codeResponse = await response.json();
 
-    console.log('Goose Response:', codeResponse.data.response);
+    console.log('Goose Approve and Apply Response:', codeResponse.response);
     // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
     // console.log('Extracted Code:', generatedCode);
     // console.log('Extracted Reasoning:', codeReasoning);
 } catch (error) {
-    console.error('Code Push operation failed:', error);
+    console.error('Git Approve and Apply operation failed:', error);
     await Ticket.findByIdAndUpdate(ticketId, { 
       status: 'failed',
       generatedCode: `// Error: ${error.message}`,
@@ -180,18 +177,23 @@ async function generateCode(ticketId) {
     const ticket = await Ticket.findById(ticketId);
 
     // Generate code using goose service
-    const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
-      sessionId: ticketId,
-      prompt: {
-        task: "Implement the following ticket details to create the required functionality and apply the changes to the relevant files in the project.",
-        intent: ticket.intent,
-        notes: ticket.notes,
-        cds: ticket.cds,
-        trigger: ticket.trigger,
-        rules: ticket.rules,
-        output: ticket.output
+    const codeResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Implement the following ticket details to create the required functionality and apply the changes to the relevant files in the project.",
+          intent: ticket.intent,
+          notes: ticket.notes,
+          cds: ticket.cds,
+          trigger: ticket.trigger,
+          rules: ticket.rules,
+          output: ticket.output
+        },
+        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
 
 {
   "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
@@ -225,20 +227,27 @@ Formatting rules for the **reasoning** field
 
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
 `
+      })
     });
 
-    console.log('Goose Response:', codeResponse.data.response);
-    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
+    const codeData = await codeResponse.json();
+    console.log('Goose Response:', codeData.response);
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeData.response);
     console.log('Extracted Code:', generatedCode);
     console.log('Extracted Reasoning:', codeReasoning);
 
     // Generate test cases
-    const testResponse = await axios.post(`${GOOSE_SERVICE_URL}/generate`, {
-      sessionId: ticketId,
-      prompt: {
-        task: "Generate test cases for the generated SAP CAP Java code. "
+    const testResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Generate test cases for the generated SAP CAP Java code. "
+        },
+        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
 
 {
   "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
@@ -272,10 +281,12 @@ Formatting rules for the **reasoning** field
 
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
 `
+      })
     });
 
-    console.log('Goose Test Response:', testResponse.data.response);
-    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(testResponse.data.response);
+    const testData = await testResponse.json();
+    console.log('Goose Test Response:', testData.response);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(testData.response);
     console.log('Extracted Test Code:', generatedTests);
     console.log('Extracted Test Reasoning:', testReasoning);
 
@@ -288,7 +299,7 @@ Do **not** include any markdown fencing, backticks, or explanatory text outside 
         testGeneration: testReasoning,
         timestamp: new Date().toISOString()
       }
-    }, axiosConfig);
+    });
 
   } catch (error) {
     console.error('Code generation failed:', error);
@@ -388,9 +399,9 @@ ticketController = {
         console.log('gooseGit completed.');      } catch (error) {
         console.error('Error in gooseGit:', error);
       }      // Kick off async code generation
-      // console.log('Initiating code gen...');
-      // await generateCode(ticket._id);
-      // console.log('Code Gen Completed!');
+      console.log('Initiating code gen...');
+      await generateCode(ticket._id);
+      console.log('Code Gen Completed!');
 
       res.status(201).json(ticket);
     } catch (err) {
@@ -442,7 +453,11 @@ ticketController = {
       const ticket = await Ticket.findById(req.params.id);
       if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
+      console.log("Before approve and apply in ticket controller");
+      
       await handleApproveAndApply(ticket._id);
+
+      console.log("After approve and apply in ticket controller");
       
       // Fetch updated ticket
       const updatedTicket = await Ticket.findById(ticket._id);

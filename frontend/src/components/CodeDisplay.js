@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MonacoEditor from '@monaco-editor/react';
 import ChatPrompt from './ChatPrompt';
+import { approveTicket } from '../utils/api';
 
 const GithubIcon = (props) => (
   <svg
@@ -26,6 +27,8 @@ const GithubIcon = (props) => (
 const codeSample = `/*\n * Handler to avoid updating a "closed" incident\n */\n@Before(event = CanService.EVENT_UPDATE)\npublic void ensureNoUpdateOnClosedIncidents(Incidents incident) {\n    Incidents in = db.run(Select.from(Incidents.class).where(i -> i.ID().eq(incident.getId()))).single(Incidents.class);\n    if (in.getStatusCode().equals("C")) {\n        throw new ServiceException(ErrorStatuses.CONFLICT, "Can't modify a closed incident");\n    }\n}`;
 
 const testSample = `/**\n * Test to ensure there is an Incident created by each Customer.\n * @throws Exception\n */\n@Test\n@WithMockUser(username = "alice")\nvoid expandEntityEndpoint() throws Exception {\n    mockMvc.perform(get(expandEntityURI))\n      .andExpect(jsonPath("$.value[0].incidents[0]").isMap())\n      .andExpect(jsonPath("$.value[0].incidents[0]").isNotEmpty());\n}`;
+
+
 
 const MonacoWrapper = ({ value, onChange, language = "java" }) => {
   const containerRef = useRef(null);
@@ -107,6 +110,28 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
     });
   }, [ticket]);
 
+  const handleApproveAndApply = async () => {
+    try {
+      setIsRefining(true);
+      const updatedTicket = await approveTicket(currentTicket._id);
+      setCurrentTicket(updatedTicket);
+      if (onStatusChange) {
+        onStatusChange(updatedTicket.status);
+      }
+    } catch (error) {
+      console.error('Error approving and applying:', error);
+      // Show error notification
+      setCopyFeedback({
+        open: true,
+        message: 'Failed to approve and apply changes. Please try again.',
+        severity: 'error'
+      });
+    } finally {
+      setIsRefining(false);
+    }
+  };
+  
+
   const handleRefinementComplete = async () => {
     try {
       const response = await fetch(`/api/tickets/${currentTicket._id}`);
@@ -118,27 +143,6 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
       setTestEdit(updatedTicket.testCases || testSample);
     } catch (error) {
       console.error('Error refreshing ticket:', error);
-    } finally {
-      setIsRefining(false);
-    }
-  };
-
-  const handleApproveAndApply = async () => {
-    try {
-      setIsRefining(true);
-      const response = await fetch(`/api/tickets/${currentTicket._id}/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
-      const updatedTicket = await response.json();
-      setCurrentTicket(updatedTicket);
-    } catch (error) {
-      console.error('Error approving and applying:', error);
     } finally {
       setIsRefining(false);
     }

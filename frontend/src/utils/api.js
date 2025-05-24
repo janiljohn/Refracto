@@ -33,4 +33,16 @@ export const refineTicket = async (id, prompt) => {
     throw new Error(error.error || 'Failed to refine code');
   }
   return res.json();
+};
+
+export const approveTicket = async (id) => {
+  const res = await fetch(`${API_BASE}/tickets/${id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Failed to approve and apply changes');
+  }
+  return res.json();
 }; 

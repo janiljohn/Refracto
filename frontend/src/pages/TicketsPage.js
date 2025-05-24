@@ -22,7 +22,7 @@ import CodeDisplay from '../components/CodeDisplay';
 import ChatPrompt from '../components/ChatPrompt';
 import CreateTicketModal from '../components/CreateTicketModal';
 import TicketForm from '../components/TicketForm';
-import { deleteTicket, updateTicket } from '../utils/api';
+import { deleteTicket, updateTicket, approveTicket } from '../utils/api';
 
 const drawerWidth = 320;
 
@@ -75,6 +75,33 @@ const TicketsPage = () => {
   const handleCancel = () => {
     setMode('view');
   };
+
+  // const handleApproveAndApply = async () => {
+  //   try {
+
+  //     console.log("Before approve and apply");
+      
+  //     // setIsRefining(true);
+  //     const response = await fetch(`/api/tickets/${currentTicket._id}/approve`, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json'
+  //       }
+  //     });
+
+  //     console.log("Hitting approve and apply");
+      
+      
+  //     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+  //     const updatedTicket = await response.json();
+  //     setCurrentTicket(updatedTicket);
+  //   } catch (error) {
+  //     console.error('Error approving and applying:', error);
+  //   } finally {
+  //     setIsRefining(false);
+  //   }
+  // };
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>

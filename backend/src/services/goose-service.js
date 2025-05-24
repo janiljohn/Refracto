@@ -106,10 +106,10 @@ const executeGooseCommand = async (session, prompt, timeout = 120000) => {
             console.log("Input:", data.toString());
         });
         proc.stdout.on('data', (data) => {
-            console.log("Child stdout:", data.toString());
+            console.log(data.toString());
         });
         proc.stderr.on('data', (data) => {
-            console.error("Child stderr:", data.toString());
+            console.error(data.toString());
         });
 
         proc.stdout.on('data', (data) => stdout += data);
