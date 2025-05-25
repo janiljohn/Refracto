@@ -171,6 +171,8 @@ async function generateCode(ticketId) {
     await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
     const ticket = await Ticket.findById(ticketId);
 
+    gooseGit(ticketId);
+
     // Generate code using goose service
     const codeResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
       method: 'POST',
