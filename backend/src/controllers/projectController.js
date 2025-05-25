@@ -21,4 +21,19 @@ exports.importProject = async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to import project' });
   }
+};
+
+exports.checkProject = async (req, res) => {
+  try {
+    const { repoUrl } = req.query;
+    const project = await Project.findOne({ repoUrl });
+    if (project) {
+      res.json({ exists: true, entities: project.entities });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to check project' });
+  }
 }; 
