@@ -37,12 +37,25 @@ const LandingPage = () => {
     }
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE}/projects/import`, { repoUrl: githubUrl });
-      localStorage.setItem('githubUrl', githubUrl);
-      localStorage.setItem('entities', JSON.stringify(res.data.entities || []));
-      navigate('/tickets');
+      // Check if project exists
+      const checkRes = await axios.get(`${API_BASE}/projects/check`, {
+        params: { repoUrl: githubUrl }
+      });
+
+      if (checkRes.data.exists) {
+        // Project exists, store data and redirect
+        localStorage.setItem('githubUrl', githubUrl);
+        localStorage.setItem('entities', JSON.stringify(checkRes.data.entities || []));
+        navigate('/tickets');
+      } else {
+        // New project, import it
+        const res = await axios.post(`${API_BASE}/projects/import`, { repoUrl: githubUrl });
+        localStorage.setItem('githubUrl', githubUrl);
+        localStorage.setItem('entities', JSON.stringify(res.data.entities || []));
+        navigate('/tickets');
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to import project');
+      setError(err.response?.data?.error || 'Failed to process repository');
     } finally {
       setLoading(false);
     }

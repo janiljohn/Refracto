@@ -21,6 +21,10 @@ app.get('/', (req, res) => {
 app.use('/api/tickets', require('./routes/ticketRoutes'));
 app.use('/api/projects', require('./routes/projectRoutes'));
 
+// EC2
+// app.use('/tickets', require('./routes/ticketRoutes'));
+// app.use('/projects', require('./routes/projectRoutes'));
+
 const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {

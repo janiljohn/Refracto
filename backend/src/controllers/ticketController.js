@@ -19,16 +19,11 @@ function extractCodeAndReasoningLoosely(rawText) {
     .join('\n')
     .trim();
 
-  // Extract code inside ```java ... ```
-    // Extract code as a plain string
-    const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)",/);
-
-    // Extract reasoning as a plain string
-    const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
-  
-  // const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds|json)?\n([\s\S]*?)```/);
-  // const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"/);
-  // const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+  // Extract code and reasoning from the format:
+  // "code": "actual code here",
+  // "reasoning": "actual reasoning here"
+  const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"(?=\s*,\s*"reasoning"|$)/);
+  const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"(?=\s*}|$)/);
 
   if (!codeMatch || !reasoningMatch) {
     console.error('Failed to match patterns. Text received:', cleanedText);
@@ -393,16 +388,8 @@ ticketController = {
       console.log('Received body:', req.body);
       const ticket = new Ticket(req.body);
       await ticket.save();
-      try {
-        console.log('Calling gooseGit...');
-        await gooseGit(ticket._id);
-        console.log('gooseGit completed.');      } catch (error) {
-        console.error('Error in gooseGit:', error);
-      }      // Kick off async code generation
-      console.log('Initiating code gen...');
-      await generateCode(ticket._id);
-      console.log('Code Gen Completed!');
-
+      // Kick off async code generation
+      generateCode(ticket._id);
       res.status(201).json(ticket);
     } catch (err) {
       res.status(400).json({ error: err.message });
