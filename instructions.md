@@ -1,88 +1,61 @@
-The project is called Refracto.
+```markdown
+## Prompt for Cursor
+
+Build a modern, single-page marketing site for **Refracto** that echoes the clean, dark style of cursor.sh.  
+**Critical:** make **visual/UI changes to the landing page only**—do **not** alter or break any existing functionality, routes, data flow, or backend logic.
+
+### Design brief
+- Use `/assets/logo/refracto.svg` as the brand mark; position it beside or above the main hero headline.  
+- Background palette: deep navy fading to indigo, with soft violet accents—mirroring Cursor’s gradient hero band and alternating with dark-slate sections.  
+- Typography: extra-bold display font for headlines, light sans-serif for body text; generous letter-spacing in section labels.  
+- Primary accent colour: **#6366F1** (indigo).  
+- Add subtle micro-interactions: fade-in on scroll, button hover lift, and a mild parallax (≈ 5–10 px) on images.  
+- **Preserve all current form inputs, buttons, and submission behaviour exactly as they exist.**
+
+### Assets available
+The directory `/assets/screenshots` contains four high-resolution PNGs of our current app:  
+
+| File name       | Suggested alt text                                          |
+| --------------- | ----------------------------------------------------------- |
+| `overall.png`   | “Overall Refracto interface overview”                       |
+| `reasoning.png` | “AI reasoning tab showing step-by-step refactor plan”       |
+| `create.png`    | “Ticket creation workflow inside Refracto”                  |
+| `editor.png`    | “In-app code editor with live refactor preview”             |
+
+### Page structure
+1. **Hero** – full-viewport height, centred copy  
+   • H1: “Refracto — The AI Code Refactorer”  
+   • One-line subhead: “Clean, modernise, and optimise code in seconds.”  
+   • Two CTAs: solid indigo “Download for Mac” and ghost “All platforms”.  
+   • Logo + headline align left on desktop, centre-stacked on mobile.  
+
+2. **Trusted by** strip – slim dark bar stating “Trusted by engineers at” plus greyscale tech logos that gain opacity on hover.  
+
+3. **Features** – four alternating rows (text left / screenshot right, then flipped) using the screenshots above  
+   1. “One-click refactors” — `overall.png`  
+   2. “Understands your codebase” — `reasoning.png`  
+   3. “Create tasks in natural language” — `create.png`  
+   4. “Inline editing with AI hints” — `editor.png`  
+   Each row slides up as it enters the viewport.  
+
+4. **Testimonials** – horizontally scrollable cards with avatar, name, company, and short quote; snap scrolling with a subtle shadow-lift on the active card.  
+
+5. **Bottom CTA** – sticky glass-blur bar: “Ready to refactor at lightspeed?” with an indigo button “Get Refracto”.  
+
+6. **Footer** – minimal: logo, copyright, and social icons (monochrome until hover).
+
+### Responsiveness & accessibility
+- Mobile-first; breakpoints at 640 px and 1024 px.  
+- Ensure at least 4.5 : 1 colour contrast for text.  
+- Provide descriptive alt text for all images (use the phrases above).  
+
+### Performance & SEO
+- Lazy-load screenshots except `overall.png`, which should be `priority`.  
+- Preload the logo SVG.  
+- Set meta title “Refracto — The AI Code Refactorer” and an OG image using the logo on a dark-gradient background.  
 
 ---
 
-## 🛠️ Ticketing System UI Specification
-
-### 📌 Overview
-This is a MERN stack-based UI for a code generation platform where users create and manage tickets representing code implementation scenarios. Each ticket, once created, triggers a backend AI-powered SDK (`goose`) to generate code and test cases based on the ticket description. There is no authentication. Start with a landing page that has the project name and a text box that requests the github url for the project to work on. Once submitted redirect to the tickets page.
-
----
-
-### 🧱 Components & Layout
-
-#### 🔲 Sidebar (Left Panel)
-- **Ticket List**:
-  - Displays a list of user-created tickets.
-  - Each ticket box includes:
-    - Ticket title (e.g., *Ticket 1*)
-    - Ticket description (preview or snippet)
-    - Status tag (color-coded: blue, yellow, green, red)
-  - Clicking a ticket loads its code details in the right panel.
-- **Create New Scenario Button**:
-  - A `+ Create New Scenario` button at the bottom.
-  - Opens a modal or inline form to enter a new ticket title and description.
-
-#### 💻 Main Window (Right Panel)
-- **When a ticket is selected**:
-  - **Code Implementation Section**:
-    - Shows the generated code (editable).
-    - Comes from the backend Goose SDK response.
-  - **Test Case Implementation Section**:
-    - Shows test code related to the scenario (also editable).
-- **Approve & Apply Button**:
-  - Button to approve the code and push changes to the GitHub repo (via backend API).
-- **Status Indicator**:
-  - Ticket tag on left should update based on progress:
-    - `🟦 Blue`: New ticket
-    - `🟨 Yellow`: Code generation in progress
-    - `🟩 Green`: Code generation completed
-    - `🟥 Red`: Code generation failed
-
-#### 💬 Chat Prompt Panel (Bottom of Right Panel)
-- Chat-style input to prompt further refinements (e.g., “refactor this method”).
-- Backend sends this prompt and ticket ID to the Goose SDK for refined generation.
-
-#### 🔧 Ticket Management
-- **Edit Ticket**:
-  - Allow user to update existing ticket's title or description.
-- **Delete Ticket**:
-  - Option to remove ticket from the list and database.
-- **Tags**:
-  - Colored dots or badges reflecting status (hooked to backend state).
-
----
-
-### 🔁 Backend API Integration (Placeholder)
-- **POST `/api/tickets`**: Create new ticket
-- **PUT `/api/tickets/:id`**: Update ticket
-- **DELETE `/api/tickets/:id`**: Delete ticket
-- **GET `/api/tickets/:id/code`**: Fetch generated code for ticket
-- **POST `/api/tickets/:id/generate`**: Triggers Goose SDK for code generation
-- **POST `/api/tickets/:id/refine`**: Sends refinement prompt to Goose SDK
-- **POST `/api/tickets/:id/apply`**: Approve and push changes to GitHub
-
----
-
-### 🧑‍💻 Tech Details
-- **Frontend**:
-  - React (with functional components and hooks)
-  - Optional: TailwindCSS or Material UI
-- **Backend**:
-  - Node.js with Express
-  - MongoDB for ticket persistence
-  - Goose SDK integration
-  - GitHub API (for applying changes)
-- **Authentication (Optional)**:
-  - Simple user login to associate tickets
-
----
-
-### ✅ Acceptance Criteria
-- User can create, update, and delete tickets.
-- Clicking a ticket loads editable code and test case.
-- Status tags accurately reflect backend progress.
-- User can approve code to apply to GitHub repo.
-- Refinement chat prompt sends data to backend and updates UI on success.
-
----
+> **Deliverable**: modular React/Next components (Hero, Trusted, Features, Testimonials, CTA) styled with Tailwind that live entirely in the frontend landing-page code. Generate the code directly in the project—do **not** display any code here.  
+> **Do not touch backend logic, APIs, or any non-landing-page files, and do not modify or disrupt existing functionalities in any way.**
+```

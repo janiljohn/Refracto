@@ -22,7 +22,7 @@ import CodeDisplay from '../components/CodeDisplay';
 import ChatPrompt from '../components/ChatPrompt';
 import CreateTicketModal from '../components/CreateTicketModal';
 import TicketForm from '../components/TicketForm';
-import { deleteTicket, updateTicket } from '../utils/api';
+import { deleteTicket, updateTicket, approveTicket } from '../utils/api';
 
 const drawerWidth = 320;
 
@@ -48,8 +48,17 @@ const TicketsPage = () => {
   };
 
   const handleUpdate = async (updatedTicket) => {
-    await updateTicket(updatedTicket._id, { description: updatedTicket.description });
-    setSelectedTicket((prev) => ({ ...prev, description: updatedTicket.description }));
+    await updateTicket(updatedTicket._id, {
+      description: updatedTicket.description,
+      generatedCode: updatedTicket.generatedCode,
+      testCases: updatedTicket.testCases
+    });
+    setSelectedTicket((prev) => ({
+      ...prev,
+      description: updatedTicket.description,
+      generatedCode: updatedTicket.generatedCode,
+      testCases: updatedTicket.testCases
+    }));
     setMode('view');
     setRefreshTickets((c) => c + 1);
   };
@@ -67,20 +76,62 @@ const TicketsPage = () => {
     setMode('view');
   };
 
+  // const handleApproveAndApply = async () => {
+  //   try {
+
+  //     console.log("Before approve and apply");
+      
+  //     // setIsRefining(true);
+  //     const response = await fetch(`/api/tickets/${currentTicket._id}/approve`, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json'
+  //       }
+  //     });
+
+  //     console.log("Hitting approve and apply");
+      
+      
+  //     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
+  //     const updatedTicket = await response.json();
+  //     setCurrentTicket(updatedTicket);
+  //   } catch (error) {
+  //     console.error('Error approving and applying:', error);
+  //   } finally {
+  //     setIsRefining(false);
+  //   }
+  // };
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
       {/* Header */}
       <AppBar position="static" elevation={1} sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', zIndex: 1201 }}>
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none' }} onClick={() => navigate('/')}> 
-            <img src="/ricon.png" alt="Logo" style={{ height: 32, width: 32, marginRight: 8 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0, cursor: 'pointer', userSelect: 'none' }} onClick={() => navigate('/')}> 
+            <img 
+              src="/ricon.svg" 
+              alt="Logo" 
+              style={{ 
+                height: 36, 
+                width: 36, 
+                marginRight: 4,
+                filter: 'brightness(0)'
+              }} 
+            />
             <Typography
               variant="h5"
-              fontWeight={700}
+              fontWeight={600}
               color="primary"
-              sx={{ letterSpacing: 1 }}
+              sx={{ 
+                letterSpacing: 0.5,
+                fontSize: '1.5rem',
+                fontFamily: '"Inter", sans-serif',
+                ml: 0,
+                mt: 0.5
+              }}
             >
-              Refracto
+              efracto
             </Typography>
           </Box>
           <TextField
@@ -156,7 +207,15 @@ const TicketsPage = () => {
               <TicketForm mode="edit" ticket={selectedTicket} onSubmit={handleUpdate} onCancel={handleCancel} />
             )}
             {mode === 'view' && selectedTicket && (
-              <CodeDisplay ticket={selectedTicket} onDelete={handleDelete} onEdit={handleStartEdit} onUpdate={handleUpdate} />
+              <CodeDisplay 
+                ticket={selectedTicket} 
+                onDelete={handleDelete} 
+                onEdit={handleStartEdit} 
+                onUpdate={handleUpdate}
+                onStatusChange={(status) => {
+                  setSelectedTicket(prev => ({ ...prev, status }));
+                }}
+              />
             )}
             {mode === 'view' && !selectedTicket && (
               <Box
@@ -173,12 +232,6 @@ const TicketsPage = () => {
               </Box>
             )}
           </Box>
-
-          {mode === 'view' && selectedTicket && (
-            <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-              <ChatPrompt ticketId={selectedTicket._id} />
-            </Box>
-          )}
         </Box>
       </Box>
     </Box>

@@ -1,159 +1,316 @@
 const Ticket = require('../models/Ticket');
-const { MultiServerMCPClient } = require("@langchain/mcp-adapters");
-const { ChatAnthropic } = require("@langchain/anthropic");
-const { createReactAgent } = require("@langchain/langgraph/prebuilt");
-const fs = require('fs').promises;
-const path = require('path');
+// import Ticket from '../models/Ticket';
+// const axios = require('axios');
+const fetch = require('node-fetch');
+// import fetch from 'node-fetch'
 
-// Store active sessions
-const activeSessions = new Map();
+const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://0.0.0.0:8080';
 
-// Global context management
-let GLOBAL_CONTEXT = null;
+const axiosConfig = {
+  timeout: 300000 // Set timeout to 5 mins
+};
 
-// Function to load context from file
-async function loadContext(contextFilePath) {
+
+function extractCodeAndReasoningLoosely(rawText) {
+  // Clean up: remove any "Goose Response:" prefixes and extra whitespace
+  const cleanedText = rawText
+    .split('\n')
+    .filter(line => !line.startsWith('Goose Response:'))
+    .join('\n')
+    .trim();
+
+  // Extract code inside ```java ... ```
+    // Extract code as a plain string
+    const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)",/);
+
+    // Extract reasoning as a plain string
+    const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+  
+  // const codeMatch = cleanedText.match(/"code":\s*```(?:java|cds|json)?\n([\s\S]*?)```/);
+  // const codeMatch = cleanedText.match(/"code":\s*"([\s\S]*?)"/);
+  // const reasoningMatch = cleanedText.match(/"reasoning":\s*"([\s\S]*?)"\s*}/);
+
+  if (!codeMatch || !reasoningMatch) {
+    console.error('Failed to match patterns. Text received:', cleanedText);
+    throw new Error("Could not extract 'code' or 'reasoning'. Check formatting.");
+  }
+
+  // Extract and clean the code and reasoning
+  const code = codeMatch[1]
+    .replace(/\\"/g, '"')  // Unescape quotes
+    .replace(/\\n/g, '\n') // Convert \n to actual newlines
+    .trim();
+    
+  const reasoning = reasoningMatch[1]
+    .replace(/\\"/g, '"')  // Unescape quotes
+    .replace(/\\n/g, '\n') // Convert \n to actual newlines
+    .trim();
+
+  return { code, reasoning };
+}
+
+async function handleApproveAndApply(ticketId) {
   try {
-    const fileContent = await fs.readFile(contextFilePath, 'utf8');
-    return JSON.parse(fileContent);
-  } catch (error) {
-    console.error('Error loading context file:', error.message);
-    console.log('Using default context instead.');
-    return {
-      projectInfo: {
-        name: "Default Project",
-        version: "1.0.0",
-        environment: "development"
+    // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
+    const ticket = await Ticket.findById(ticketId);
+
+    // Generate code using goose service
+    const response = await fetch(`${GOOSE_SERVICE_URL}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Add any additional headers if needed
       },
-      systemInstructions: "You are an AI assistant. Please help the user with their queries."
-    };
-  }
-}
-
-// Function to generate system message from context
-function generateSystemMessage(context) {
-  if (context.systemInstructions) {
-    return context.systemInstructions + '\n\nProject Context:\n' +
-           JSON.stringify(context, null, 2);
-  }
-  return `You are an AI assistant with access to the following context:
-${JSON.stringify(context, null, 2)}
-
-Please use this context when providing assistance and ensure all operations comply with any specified rules.`;
-}
-
-// Initialize global context
-async function initializeGlobalContext() {
-  const contextPath = path.join(process.cwd(), 'agent-context.json');
-  GLOBAL_CONTEXT = await loadContext(contextPath);
-  console.log('Global context initialized from:', contextPath);
-}
-
-// Call initialization
-initializeGlobalContext().catch(console.error);
-
-async function getOrCreateSession(ticketId) {
-  if (activeSessions.has(ticketId)) {
-    return activeSessions.get(ticketId);
-  }
-
-  const ticket = await Ticket.findById(ticketId);
-  if (!ticket) throw new Error('Ticket not found');
-
-  const client = new MultiServerMCPClient({
-    throwOnLoadError: true,
-    prefixToolNameWithServerName: true,
-    additionalToolNamePrefix: "mcp",
-
-    mcpServers: {
-      fetch: {
-        transport: "stdio",
-        command: "uvx",
-        args: ["mcp-server-fetch"],
-        restart: {
-          enabled: true,
-          maxAttempts: 3,
-          delayMs: 1000,
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Perform the following Git operations based on the ticket details:",
+          intent: ticket.intent,
+          // notes: ticket.notes,
+          // cds: ticket.cds,
+          // trigger: ticket.trigger,
+          // rules: ticket.rules,
+          // output: ticket.output
         },
-      },
+        context: `1. Push the branch to the remote ${ticket.githubUrl}.
+2. Open a pull request against main:
+- Title: same as the commit message.
+- Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+- Add inline comments summarizing the core logic updates.
+Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+      })
+    });
+    
+//     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
+//       sessionId: ticketId,
+//       prompt: {
+//         task: "Perform the following Git operations based on the ticket details:",
+//         intent: ticket.intent,
+//         // notes: ticket.notes,
+//         // cds: ticket.cds,
+//         // trigger: ticket.trigger,
+//         // rules: ticket.rules,
+//         // output: ticket.output
+//       },
+//       context: `1. Create and switch to a new branch named feature/${ticketId}.
+// 2. Stage all modified and new files.
+// 3. Commit them with appropriate message based on the requirements.
+// 4. Push the branch to the remote ${ticket.githubUrl}.
+// 5. Open a pull request against main:
+//    - Title: same as the commit message.
+//    - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+//    - Add inline comments summarizing the core logic updates.
+// Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+//     }, axiosConfig);
+    const codeResponse = await response.json();
 
-      filesystem: {
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", process.env.CAP_REPO_PATH],
-      },
-      graph: {
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-memory"],
-      },
-      qdrant: {
-        transport: "stdio",
-        command: "uv",
-        args: ["run", process.env.QDRANT_BIN]
+    console.log('Goose Approve and Apply Response:', codeResponse.response);
+    // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
+    // console.log('Extracted Code:', generatedCode);
+    // console.log('Extracted Reasoning:', codeReasoning);
+} catch (error) {
+    console.error('Git Approve and Apply operation failed:', error);
+    await Ticket.findByIdAndUpdate(ticketId, { 
+      status: 'failed',
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
       }
-    },
-  });
-  const tools = await client.getTools();
-  const model = new ChatAnthropic({
-    modelName: "claude-3-5-sonnet-20240620",
-    temperature: 0,
-  });
-
-  const agent = createReactAgent({
-    llm: model,
-    tools,
-  });
-
-  // Initialize conversation history with system message
-  const systemMessage = generateSystemMessage(GLOBAL_CONTEXT);
-  const session = { 
-    agent, 
-    client, 
-    conversationHistory: [{ role: "system", content: systemMessage }] 
-  };
-  activeSessions.set(ticketId, session);
-  return session;
+    });
+  }
 }
+
+async function gooseGit(ticketId) {
+  try {
+    // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
+    // const ticket = await Ticket.findById(ticketId);
+
+    // Generate code using goose service
+    const response = await fetch(`${GOOSE_SERVICE_URL}/gooseGit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Perform the following Git operations"
+        },
+        context: `Create and switch to a new branch named feature/${ticketId}.`
+      })
+    });
+    
+    const codeResponse = await response.json();
+
+    console.log('Goose Response:', codeResponse);
+    
+    // const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/gooseGit`, {
+    //   sessionId: ticketId,
+    //   prompt: {
+    //     task: "Perform the following Git operations"
+    //   },
+    //   context: `Create and switch to a new branch named feature/${ticketId}.`
+    // });
+
+    console.log('Goose Response:', codeResponse.response);
+
+} catch (error) {
+    console.error('Code Push operation failed:', error);
+    await Ticket.findByIdAndUpdate(ticketId, { 
+      status: 'failed',
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }
+  });
+  }
+}
+
 
 async function generateCode(ticketId) {
   try {
     await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
-    const session = await getOrCreateSession(ticketId);
     const ticket = await Ticket.findById(ticketId);
 
-    // Generate code using the ticket details and context
-    const response = await session.agent.invoke({
-      messages: [
-        ...session.conversationHistory,
-        {
-          role: "user",
-          content: JSON.stringify({
-            intent: ticket.intent,
-            trigger: ticket.trigger,
-            rules: ticket.rules,
-            output: ticket.output,
-            notes: ticket.notes,
-            globalContext: GLOBAL_CONTEXT
-          })
-        }
-      ]
+    // Generate code using goose service
+    const codeResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Implement the following ticket details to create the required functionality and apply the changes to the relevant files in the project.",
+          intent: ticket.intent,
+          notes: ticket.notes,
+          cds: ticket.cds,
+          trigger: ticket.trigger,
+          rules: ticket.rules,
+          output: ticket.output
+        },
+        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+
+{
+  "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
+  "reasoning": "<concise narrative explanation in plain text, using this structure:
+
+Files read
+- file1.ext
+- file2.ext
+
+Files changed
+- file3.ext
+- file4.ext
+
+file3.ext – what & why
+- Change 1 — one-line reason
+- Change 2 — one-line reason
+- …
+
+file4.ext – what & why
+- Change 1 — one-line reason
+- …
+
+Net result
+Brief, one-sentence summary of the overall benefit.>"
+}
+
+Formatting rules for the **reasoning** field  
+• Use the section headers exactly as shown: "Files read", "Files changed", each "<filename> – what & why", and "Net result".  
+• Under each header, use short dash bullets (-) for maximum clarity; keep each bullet to a single sentence.  
+• Match the succinct style of this prompt—no tables, no long prose paragraphs.
+
+Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+`
+      })
     });
 
-    // Store conversation history
-    session.conversationHistory = response.messages;
+    const codeData = await codeResponse.json();
+    console.log('Goose Response:', codeData.response);
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeData.response);
+    console.log('Extracted Code:', generatedCode);
+    console.log('Extracted Reasoning:', codeReasoning);
+
+    // Generate test cases
+    const testResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt: {
+          task: "Generate test cases for the generated SAP CAP Java code. "
+        },
+        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+
+{
+  "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
+  "reasoning": "<concise narrative explanation in plain text, using this structure:
+
+Files read
+- file1.ext
+- file2.ext
+
+Files changed
+- file3.ext
+- file4.ext
+
+file3.ext – what & why
+- Change 1 — one-line reason
+- Change 2 — one-line reason
+- …
+
+file4.ext – what & why
+- Change 1 — one-line reason
+- …
+
+Net result
+Brief, one-sentence summary of the overall benefit.>"
+}
+
+Formatting rules for the **reasoning** field  
+• Use the section headers exactly as shown: "Files read", "Files changed", each "<filename> – what & why", and "Net result".  
+• Under each header, use short dash bullets (-) for maximum clarity; keep each bullet to a single sentence.  
+• Match the succinct style of this prompt—no tables, no long prose paragraphs.
+
+Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+`
+      })
+    });
+
+    const testData = await testResponse.json();
+    console.log('Goose Test Response:', testData.response);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(testData.response);
+    console.log('Extracted Test Code:', generatedTests);
+    console.log('Extracted Test Reasoning:', testReasoning);
 
     await Ticket.findByIdAndUpdate(ticketId, {
       status: 'completed',
-      generatedCode: response.messages[response.messages.length - 1].content,
-      testCases: '// Test cases will be generated in a separate step'
+      generatedCode: generatedCode,
+      testCases: generatedTests,
+      agentReasoning: {
+        codeGeneration: codeReasoning,
+        testGeneration: testReasoning,
+        timestamp: new Date().toISOString()
+      }
     });
 
   } catch (error) {
     console.error('Code generation failed:', error);
     await Ticket.findByIdAndUpdate(ticketId, { 
       status: 'failed',
-      generatedCode: `// Error: ${error.message}`
+      generatedCode: `// Error: ${error.message}`,
+      testCases: `// Error: ${error.message}`,
+      agentReasoning: {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 }
@@ -161,32 +318,26 @@ async function generateCode(ticketId) {
 // Refine code with chat
 async function refineCode(ticketId, prompt) {
   try {
-    const session = await getOrCreateSession(ticketId);
-    const ticket = await Ticket.findById(ticketId);
-    if (!ticket) throw new Error('Ticket not found');
-
-    const response = await session.agent.invoke({
-      messages: [
-        ...session.conversationHistory,
-        {
-          role: "user",
-          content: JSON.stringify({
-            prompt,
-            globalContext: GLOBAL_CONTEXT
-          })
-        }
-      ]
+    const response = await axios.post(`${GOOSE_SERVICE_URL}/refine`, {
+      sessionId: ticketId,
+      prompt
     });
 
-    // Update conversation history
-    session.conversationHistory = response.messages;
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(response.data.code);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(response.data.tests);
 
-    // Update ticket with refined code
+    // Update only code, tests and reasoning
     await Ticket.findByIdAndUpdate(ticketId, {
-      generatedCode: response.messages[response.messages.length - 1].content
+      generatedCode,
+      testCases: generatedTests,
+      agentReasoning: {
+        codeGeneration: codeReasoning,
+        testGeneration: testReasoning,
+        timestamp: new Date().toISOString()
+      }
     });
 
-    return { success: true, message: 'Code refined successfully' };
+    return { success: true, message: 'Code and tests refined successfully' };
   } catch (error) {
     console.error('Code refinement failed:', error);
     return { success: false, error: error.message };
@@ -195,10 +346,22 @@ async function refineCode(ticketId, prompt) {
 
 // Cleanup session when ticket is deleted
 async function cleanupSession(ticketId) {
-  const session = activeSessions.get(ticketId);
-  if (session) {
-    await session.client.close();
-    activeSessions.delete(ticketId);
+  try {
+    // Delete main session
+    try {
+      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}`);
+    } catch (error) {
+      console.error('Main session cleanup failed:', error.message);
+    }
+
+    // Delete test session
+    try {
+      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`);
+    } catch (error) {
+      console.error('Test session cleanup failed:', error.message);
+    }
+  } catch (error) {
+    console.error('Session cleanup failed:', error.message);
   }
 }
 
@@ -230,8 +393,16 @@ ticketController = {
       console.log('Received body:', req.body);
       const ticket = new Ticket(req.body);
       await ticket.save();
-      // Kick off async code generation
-      generateCode(ticket._id);
+      try {
+        console.log('Calling gooseGit...');
+        await gooseGit(ticket._id);
+        console.log('gooseGit completed.');      } catch (error) {
+        console.error('Error in gooseGit:', error);
+      }      // Kick off async code generation
+      console.log('Initiating code gen...');
+      await generateCode(ticket._id);
+      console.log('Code Gen Completed!');
+
       res.status(201).json(ticket);
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -273,6 +444,27 @@ ticketController = {
       res.json({ message: 'Ticket deleted' });
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  },
+
+  // Approve and apply ticket
+  approveTicket: async (req, res) => {
+    try {
+      const ticket = await Ticket.findById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+      console.log("Before approve and apply in ticket controller");
+      
+      await handleApproveAndApply(ticket._id);
+
+      console.log("After approve and apply in ticket controller");
+      
+      // Fetch updated ticket
+      const updatedTicket = await Ticket.findById(ticket._id);
+      res.json(updatedTicket);
+    } catch (err) {
+      console.error('Approve and apply failed:', err);
+      res.status(500).json({ error: err.message });
     }
   }
 };
