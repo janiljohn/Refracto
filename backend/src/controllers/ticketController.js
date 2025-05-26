@@ -1,8 +1,6 @@
 const Ticket = require('../models/Ticket');
-// import Ticket from '../models/Ticket';
-// const axios = require('axios');
 const fetch = require('node-fetch');
-// import fetch from 'node-fetch'
+
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://0.0.0.0:8080';
 
@@ -57,12 +55,7 @@ async function handleApproveAndApply(ticketId) {
         sessionId: ticketId,
         prompt: {
           task: "Perform the following Git operations based on the ticket details:",
-          intent: ticket.intent,
-          // notes: ticket.notes,
-          // cds: ticket.cds,
-          // trigger: ticket.trigger,
-          // rules: ticket.rules,
-          // output: ticket.output
+          intent: ticket.intent
         },
         context: `1. Push the branch to the remote ${ticket.githubUrl}.
 2. Open a pull request against main:
@@ -73,33 +66,10 @@ Output each Git command you would run, then the PR payload or CLI command you'd 
       })
     });
     
-//     const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/approve`, {
-//       sessionId: ticketId,
-//       prompt: {
-//         task: "Perform the following Git operations based on the ticket details:",
-//         intent: ticket.intent,
-//         // notes: ticket.notes,
-//         // cds: ticket.cds,
-//         // trigger: ticket.trigger,
-//         // rules: ticket.rules,
-//         // output: ticket.output
-//       },
-//       context: `1. Create and switch to a new branch named feature/${ticketId}.
-// 2. Stage all modified and new files.
-// 3. Commit them with appropriate message based on the requirements.
-// 4. Push the branch to the remote ${ticket.githubUrl}.
-// 5. Open a pull request against main:
-//    - Title: same as the commit message.
-//    - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
-//    - Add inline comments summarizing the core logic updates.
-// Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
-//     }, axiosConfig);
     const codeResponse = await response.json();
 
     console.log('Goose Approve and Apply Response:', codeResponse.response);
-    // const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeResponse.data.response);
-    // console.log('Extracted Code:', generatedCode);
-    // console.log('Extracted Reasoning:', codeReasoning);
+
 } catch (error) {
     console.error('Git Approve and Apply operation failed:', error);
     await Ticket.findByIdAndUpdate(ticketId, { 
@@ -137,14 +107,7 @@ async function gooseGit(ticketId) {
     const codeResponse = await response.json();
 
     console.log('Goose Response:', codeResponse);
-    
-    // const codeResponse = await axios.post(`${GOOSE_SERVICE_URL}/gooseGit`, {
-    //   sessionId: ticketId,
-    //   prompt: {
-    //     task: "Perform the following Git operations"
-    //   },
-    //   context: `Create and switch to a new branch named feature/${ticketId}.`
-    // });
+
 
     console.log('Goose Response:', codeResponse.response);
 
@@ -165,8 +128,10 @@ async function gooseGit(ticketId) {
 
 async function generateCode(ticketId) {
   try {
-    await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
     const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      throw new Error('Ticket not found');
+    }
 
     gooseGit(ticketId);
 
@@ -396,10 +361,17 @@ ticketController = {
   createTicket: async (req, res) => {
     try {
       console.log('Received body:', req.body);
-      const ticket = new Ticket(req.body);
+      const ticket = new Ticket({
+        ...req.body,
+        status: 'in_progress'  // Set initial status
+      });
       await ticket.save();
-      // Kick off async code generation
-      generateCode(ticket._id);
+      
+      // Start code generation but don't wait for it
+      generateCode(ticket._id).catch(error => {
+        console.error('Code generation failed:', error);
+      });
+      
       res.status(201).json(ticket);
     } catch (err) {
       res.status(400).json({ error: err.message });

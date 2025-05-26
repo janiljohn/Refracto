@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Box, 
   Drawer, 
@@ -32,6 +32,72 @@ const TicketsPage = () => {
   const [refreshTickets, setRefreshTickets] = useState(0);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+
+  // Add polling effect for selected ticket
+  useEffect(() => {
+    let pollInterval;
+
+    const pollTicketStatus = async () => {
+      if (!selectedTicket) return;
+
+      // Log status changes for debugging
+      console.log('Polling ticket status:', {
+        id: selectedTicket._id,
+        currentStatus: selectedTicket.status,
+        timestamp: new Date().toISOString()
+      });
+
+      try {
+        const response = await fetch(`/api/tickets/${selectedTicket._id}`);
+        if (!response.ok) throw new Error('Failed to fetch ticket');
+        
+        const updatedTicket = await response.json();
+        
+        // Check if status changed
+        if (updatedTicket.status !== selectedTicket.status) {
+          console.log('Ticket status changed:', {
+            id: selectedTicket._id,
+            oldStatus: selectedTicket.status,
+            newStatus: updatedTicket.status,
+            timestamp: new Date().toISOString()
+          });
+          
+          setSelectedTicket(updatedTicket);
+          setRefreshTickets(c => c + 1);
+        }
+      } catch (error) {
+        console.error('Error polling ticket status:', error);
+      }
+    };
+
+    // Immediate check on ticket selection
+    if (selectedTicket) {
+      pollTicketStatus();
+    }
+
+    // Start polling if ticket is in progress
+    if (selectedTicket && ['new', 'in_progress'].includes(selectedTicket.status)) {
+      console.log('Starting polling for ticket:', {
+        id: selectedTicket._id,
+        status: selectedTicket.status,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Poll every 2 seconds
+      pollInterval = setInterval(pollTicketStatus, 2000);
+    }
+
+    return () => {
+      if (pollInterval) {
+        console.log('Stopping polling for ticket:', {
+          id: selectedTicket?._id,
+          status: selectedTicket?.status,
+          timestamp: new Date().toISOString()
+        });
+        clearInterval(pollInterval);
+      }
+    };
+  }, [selectedTicket]);
 
   const handleTicketCreated = (ticket) => {
     setMode('view');
