@@ -17,9 +17,9 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H YOUR.EC2.IP.ADDRESS >> ~/.ssh/known_hosts
+          chmod 400 ~/.ssh/id_rsa
+          ssh-keyscan -H 44.246.103.39 >> ~/.ssh/known_hosts
 
       - name: Deploy via SSH
         run: |
-          ssh -i ~/.ssh/id_rsa ec2-user@ec2-34-214-97-142.us-west-2.computer.amazonaws.com 'bash /home/ubuntu/my-app/deploy.sh'
+          ssh -i ~/.ssh/id_rsa ec2-user@ec2-44-246-103-39.us-west-2.compute.amazonaws.com 'bash /home/ec2-user/deploy.sh'

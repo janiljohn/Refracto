@@ -78,7 +78,7 @@ const Hero = () => {
               sx={{
                 fontWeight: 800,
                 fontSize: { xs: '2.5rem', md: '3.5rem' },
-                mb: 2,
+                mb: 1,
                 background: 'linear-gradient(45deg, #006BB8 30%, #005A9E 90%)',
                 backgroundClip: 'text',
                 textFillColor: 'transparent',
@@ -86,7 +86,19 @@ const Hero = () => {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              Refracto — The AI Code Refactorer
+              Refracto
+            </Typography>
+            <Typography
+              variant="h3"
+              component="h2"
+              sx={{
+                fontWeight: 600,
+                fontSize: { xs: '1.8rem', md: '2.2rem' },
+                mb: 2,
+                color: '#005A9E',
+              }}
+            >
+              Ticket Driven Agentic Code Generation
             </Typography>
             <Typography
               variant="h5"
