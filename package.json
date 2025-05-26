@@ -5,17 +5,13 @@
   "scripts": {
     "client": "npm start --prefix frontend",
     "server": "npm run dev --prefix backend",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "goose": "npm run goose --prefix backend/src/services",
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run goose\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "@langchain/anthropic": "^0.3.20",
-    "@langchain/core": "^0.3.53",
-    "@langchain/langgraph": "^0.2.68",
-    "@langchain/mcp-adapters": "^0.4.2",
-    "dotenv": "^16.5.0",
-    "langchain": "^0.3.24"
+    "dotenv": "^16.5.0"
   }
 } 

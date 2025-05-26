@@ -453,13 +453,14 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
           </Box>
           <Box sx={{ 
             height: '100%', 
-            overflow: 'auto',
+            overflow: 'hidden',
             '& .syntax-highlighter': {
               margin: 0,
               height: '100%',
               '& pre': {
                 margin: 0,
-                height: '100%'
+                height: '100%',
+                overflow: 'auto'
               }
             }
           }}>
