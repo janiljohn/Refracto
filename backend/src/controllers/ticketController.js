@@ -6,9 +6,6 @@ const fetch = require('node-fetch');
 
 const GOOSE_SERVICE_URL = process.env.GOOSE_SERVICE_URL || 'http://0.0.0.0:8080';
 
-const axiosConfig = {
-  timeout: 300000 // Set timeout to 5 mins
-};
 
 
 function extractCodeAndReasoningLoosely(rawText) {
@@ -315,13 +312,20 @@ Do **not** include any markdown fencing, backticks, or explanatory text outside 
 // Refine code with chat
 async function refineCode(ticketId, prompt) {
   try {
-    const response = await axios.post(`${GOOSE_SERVICE_URL}/refine`, {
-      sessionId: ticketId,
-      prompt
+    const response = await fetch(`${GOOSE_SERVICE_URL}/refine`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sessionId: ticketId,
+        prompt
+      })
     });
 
-    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(response.data.code);
-    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(response.data.tests);
+    const data = await response.json();
+    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(data.code);
+    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(data.tests);
 
     // Update only code, tests and reasoning
     await Ticket.findByIdAndUpdate(ticketId, {
@@ -346,14 +350,18 @@ async function cleanupSession(ticketId) {
   try {
     // Delete main session
     try {
-      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}`);
+      await fetch(`${GOOSE_SERVICE_URL}/session/${ticketId}`, {
+        method: 'DELETE'
+      });
     } catch (error) {
       console.error('Main session cleanup failed:', error.message);
     }
 
     // Delete test session
     try {
-      await axios.delete(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`);
+      await fetch(`${GOOSE_SERVICE_URL}/session/${ticketId}_tests`, {
+        method: 'DELETE'
+      });
     } catch (error) {
       console.error('Test session cleanup failed:', error.message);
     }
