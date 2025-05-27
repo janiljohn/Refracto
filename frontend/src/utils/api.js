@@ -45,4 +45,21 @@ export const approveTicket = async (id) => {
     throw new Error(error.error || 'Failed to approve and apply changes');
   }
   return res.json();
+};
+
+export const terminateTicket = async (id) => {
+  const res = await fetch(`${API_BASE}/tickets/${id}/terminate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Failed to terminate ticket');
+  }
+  return res.json();
+};
+
+export const getTicket = async (id) => {
+  const res = await axios.get(`${API_BASE}/tickets/${id}`);
+  return res.data;
 }; 

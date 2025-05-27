@@ -22,7 +22,7 @@ import CodeDisplay from '../components/CodeDisplay';
 import ChatPrompt from '../components/ChatPrompt';
 import CreateTicketModal from '../components/CreateTicketModal';
 import TicketForm from '../components/TicketForm';
-import { deleteTicket, updateTicket, approveTicket } from '../utils/api';
+import { deleteTicket, updateTicket, approveTicket, getTicket } from '../utils/api';
 
 const drawerWidth = 320;
 
@@ -48,10 +48,7 @@ const TicketsPage = () => {
       });
 
       try {
-        const response = await fetch(`/api/tickets/${selectedTicket._id}`);
-        if (!response.ok) throw new Error('Failed to fetch ticket');
-        
-        const updatedTicket = await response.json();
+        const updatedTicket = await getTicket(selectedTicket._id);
         
         // Check if status changed
         if (updatedTicket.status !== selectedTicket.status) {

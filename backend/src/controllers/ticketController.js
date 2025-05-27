@@ -435,6 +435,32 @@ ticketController = {
       console.error('Approve and apply failed:', err);
       res.status(500).json({ error: err.message });
     }
+  },
+
+  // Terminate ticket
+  terminateTicket: async (req, res) => {
+    try {
+      const ticket = await Ticket.findById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+      // Update ticket status to failed
+      await Ticket.findByIdAndUpdate(ticket._id, {
+        status: 'failed',
+        agentReasoning: {
+          error: 'Ticket terminated by user',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      // Cleanup any running sessions
+      await cleanupSession(ticket._id);
+
+      const updatedTicket = await Ticket.findById(ticket._id);
+      res.json(updatedTicket);
+    } catch (err) {
+      console.error('Terminate ticket failed:', err);
+      res.status(500).json({ error: err.message });
+    }
   }
 };
 

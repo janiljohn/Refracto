@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade, Snackbar, Alert } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon, ContentCopy as CopyIcon, Check as CheckIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon, ContentCopy as CopyIcon, Check as CheckIcon, Stop as StopIcon } from '@mui/icons-material';
 import { getStatusColor } from '../utils/statusUtils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MonacoEditor from '@monaco-editor/react';
 import ChatPrompt from './ChatPrompt';
-import { approveTicket } from '../utils/api';
+import { approveTicket, terminateTicket } from '../utils/api';
 
 const GithubIcon = (props) => (
   <svg
@@ -213,6 +213,25 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
     setCopyFeedback({ open: false, message: '' });
   };
 
+  const handleTerminate = async () => {
+    if (window.confirm('Are you sure you want to terminate this ticket? This will stop all generation tasks and mark the ticket as failed.')) {
+      try {
+        const updatedTicket = await terminateTicket(currentTicket._id);
+        setCurrentTicket(updatedTicket);
+        if (onStatusChange) {
+          onStatusChange(updatedTicket.status);
+        }
+      } catch (error) {
+        console.error('Error terminating ticket:', error);
+        setCopyFeedback({
+          open: true,
+          message: 'Failed to terminate ticket. Please try again.',
+          severity: 'error'
+        });
+      }
+    }
+  };
+
   const renderLoadingState = () => (
     <Box sx={{ 
       display: 'flex', 
@@ -221,8 +240,23 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
       justifyContent: 'center',
       height: '100%',
       gap: 2,
-      p: 4
+      p: 4,
+      position: 'relative'
     }}>
+      <Button
+        startIcon={<StopIcon />}
+        color="error"
+        variant="outlined"
+        onClick={handleTerminate}
+        sx={{ 
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          zIndex: 1
+        }}
+      >
+        Terminate
+      </Button>
       <CircularProgress size={60} thickness={4} />
       <Typography variant="h6" color="text.secondary">
         Agent is working...
@@ -528,6 +562,17 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
           {currentTicket.status.replace('_', ' ')}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          {(currentTicket.status === 'pending' || currentTicket.status === 'in_progress') && (
+            <Button
+              startIcon={<StopIcon />}
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={handleTerminate}
+            >
+              Terminate
+            </Button>
+          )}
           <Button
             startIcon={<EditIcon />}
             size="small"

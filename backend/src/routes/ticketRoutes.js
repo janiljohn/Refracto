@@ -9,5 +9,6 @@ router.put('/:id', ticketController.updateTicket);
 router.delete('/:id', ticketController.deleteTicket);
 router.post('/:id/refine', ticketController.refineTicket);
 router.post('/:id/approve', ticketController.approveTicket);
+router.post('/:id/terminate', ticketController.terminateTicket);
 
 module.exports = router; 
