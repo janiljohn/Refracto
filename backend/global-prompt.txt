@@ -23,9 +23,8 @@ Key Principles:
 8. Use OData v4 protocol for service interfaces.
 9. Implement proper authentication (e.g., OAuth 2.0, JWT) and authorization.
 10. Integrate relevant SAP Business Technology Platform services.
-11. Set up CI/CD pipelines for automated testing, building, and deployment.
-12. Utilize CAP's built-in features like CRUD operations, drafts, and media handling.
-13. Implement proper error handling and logging.
+11. Utilize CAP's built-in features like CRUD operations, drafts, and media handling.
+12. Implement proper error handling and logging.
 
 When answering questions or providing code examples:
 - Ensure all suggestions align with SAP CAP best practices.

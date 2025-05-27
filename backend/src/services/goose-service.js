@@ -5,10 +5,15 @@ import stripAnsi from 'strip-ansi';
 import Session from '../models/Session.js';
 import connectDB from '../config/db.js';
 
+import timeout from 'connect-timeout'
+
 import 'dotenv/config'
 const app = express();
 app.use(express.json());
 
+// app.setTimeout(10 * 60 * 1000); // Set a default timeout of 2 minutes for all requests
+
+app.use(timeout('600000s'))
 const GOOSE_WORKING_DIR = process.env.GOOSE_WORKING_DIR
 log("GOOSE_WORKING_DIR:", GOOSE_WORKING_DIR);
 
@@ -78,7 +83,7 @@ const getOrCreateSession = async (sessionId) => {
 };
 
 // Execute goose command
-const executeGooseCommand = async (session, prompt, timeout = 120000) => {
+const executeGooseCommand = async (session, prompt, timeout = 600000) => {
     const arg = ['session'];
     if (session.history.length > 0) {
         arg.push('--resume');
@@ -159,7 +164,7 @@ app.post('/approve', async (req, res) => {
     // const rules = prompt.rules != '' ? `Constraints to enforce : ${prompt.rules}` : '';
     // const output = prompt.output != '' ? `Desired Output should look like: ${prompt.output}` : '';
 
-    const fullPrompt = [context, task, requirements]
+    const fullPrompt = [task, context]
         .filter(Boolean)  // Remove empty strings
         .join(' ');
 
@@ -169,7 +174,7 @@ app.post('/approve', async (req, res) => {
     
     try {
         const session = await getOrCreateSession(sessionId);
-        const response = await executeGooseCommand(session, prompt);
+        const response = await executeGooseCommand(session, fullPrompt);
         res.json({ 
             response,
             sessionId: session.id,
@@ -210,6 +215,7 @@ app.post('/generate', async (req, res) => {
     const { sessionId, prompt, context } = req.body;
 
     // Only include non-empty fields
+    const approval = "Consider that you have full access to codebase and dont need to ask for ANY APPROVAL WHATSOVER"
     const task = prompt.task != '' ? `${prompt.task}` : '';
     const requirements = prompt.intent != '' ? `Requirement we want to implement: ${prompt.intent}` : '';
     const trigger = prompt.trigger != '' ? `Trigger conditions to enforce: ${prompt.trigger}` : '';

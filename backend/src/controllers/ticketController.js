@@ -54,20 +54,49 @@ async function handleApproveAndApply(ticketId) {
       body: JSON.stringify({
         sessionId: ticketId,
         prompt: {
-          task: "Perform the following Git operations based on the ticket details:",
+          task: "Perform the following version control operations:",
           intent: ticket.intent
         },
-        context: `1. Push the branch to the remote ${ticket.githubUrl}.
-2. Open a pull request against main:
-- Title: same as the commit message.
-- Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
-- Add inline comments summarizing the core logic updates.
-Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.`
+
+        // context: `Assuming we're on feature/6835232b5d666395ae1c79f5 branch, if not switch to it. Stage changes with "git add .", commit changes using "git commit -m "${ticket.intent}" as the message, and push using "git push -u origin feature/6835232b5d666395ae1c79f5".
+        // After that, perform the following GitHub operations strictly in the order given via CLI commands:
+        // - gh pr create --repo refractoai/incidents-app --base main --head feature/6835232b5d666395ae1c79f5 --title ${ticket.intent} --body "{Whatever work was done}" --assignee "@me"
+        // - gh pr view feature/6835232b5d666395ae1c79f5 --json url --jq '.url'
+        // After running these commands, respond with the pull request URL in the following JSON format:
+        // {
+        //   "pr_url": "{HTTPS GitHub Pull Request URL}"
+        // }`
+        context: `Assuming we're on feature/${ticketId} branch, if not switch to it. Stage changes with "git add .", commit changes using "git commit -m "${ticket.title}" as the message, and push using "git push -u origin feature/${ticketId}".
+        After that, perform the following GitHub operations strictly in the order given via CLI commands:
+        - gh pr create --repo refractoai/incidents-app --base main --head feature/${ticketId} --title ${ticket.intent} --body "{Whatever work was done}" --assignee "@me"
+        - gh pr view feature/${ticketId} --json url --jq '.url'
+        After running these commands, respond with the pull request URL in the following JSON format:
+        {
+          "pr_url": "{HTTPS GitHub Pull Request URL}"
+        }
+        Make sure the git operations are executed separately and NOT in the same command, they should be executed sequentially.
+        Fail gracefully if some error occurs during the git operations, and provide a clear error message in the response -
+        {
+          "error": "<Error message here>"
+        }
+        `
+//           context: ` GitHub User - (refractoai) is already authenticated via Personal Access Token (PAT) with full access to the repository.
+// 1. Push the branch to the remote ${ticket.githubUrl}.
+// 2. Open a pull request against main:
+// - Title: same as the commit message.
+// - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
+// - Add inline comments summarizing the core logic updates.
+// Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.
+// Respond **EXACTLY** in the following JSON format (no extra text before or after) after c:
+//   {
+//     "pr_url": "{HTTPS GitHub Pull Request URL}",
+//   }`
       })
-    });
-    
+    })
+
     const codeResponse = await response.json();
 
+    console.log('Goose Response:', codeResponse);
     console.log('Goose Approve and Apply Response:', codeResponse.response);
 
 } catch (error) {
@@ -100,7 +129,7 @@ async function gooseGit(ticketId) {
         prompt: {
           task: "Perform the following Git operations"
         },
-        context: `Create and switch to a new branch named feature/${ticketId}.`
+        context: `Create and switch to a new branch named feature/${ticketId} from the main branch ONLY. Use the available Git MCP tools for git operations.`
       })
     });
     
@@ -108,8 +137,7 @@ async function gooseGit(ticketId) {
 
     console.log('Goose Response:', codeResponse);
 
-
-    console.log('Goose Response:', codeResponse.response);
+    // console.log('Goose Response:', codeResponse.response);
 
 } catch (error) {
     console.error('Code Push operation failed:', error);
@@ -133,7 +161,7 @@ async function generateCode(ticketId) {
       throw new Error('Ticket not found');
     }
 
-    gooseGit(ticketId);
+    await gooseGit(ticketId);
 
     // Generate code using goose service
     const codeResponse = await fetch(`${GOOSE_SERVICE_URL}/generate`, {
@@ -152,7 +180,7 @@ async function generateCode(ticketId) {
           rules: ticket.rules,
           output: ticket.output
         },
-        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
+        context: `Respond **EXACTLY** in the following JSON format (no extra text before or after):
 
 {
   "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
@@ -185,12 +213,15 @@ Formatting rules for the **reasoning** field
 • Match the succinct style of this prompt—no tables, no long prose paragraphs.
 
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+
+Important NOTE: After producing the JSON response, WRITE the generated code into the exact directories and filenames you listed under Files changed, creating any missing folders/files so the project is immediately runnable without manual copy-pasting.
 `
       })
     });
 
     const codeData = await codeResponse.json();
-    console.log('Goose Response:', codeData.response);
+    console.log('Code Generation Response:', codeData);
+    // console.log('Goose Response:', codeData.response);
     const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(codeData.response);
     console.log('Extracted Code:', generatedCode);
     console.log('Extracted Reasoning:', codeReasoning);
@@ -239,12 +270,13 @@ Formatting rules for the **reasoning** field
 • Match the succinct style of this prompt—no tables, no long prose paragraphs.
 
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
+Important NOTE: After producing the JSON response, WRITE the generated code into the exact directories and filenames you listed under Files changed, creating any missing folders/files so the project is immediately runnable without manual copy-pasting.
 `
       })
     });
 
     const testData = await testResponse.json();
-    console.log('Goose Test Response:', testData.response);
+    console.log('Goose Test Response:', testData);
     const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(testData.response);
     console.log('Extracted Test Code:', generatedTests);
     console.log('Extracted Test Reasoning:', testReasoning);
