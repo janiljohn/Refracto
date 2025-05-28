@@ -537,17 +537,18 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
 
   const renderStatusBadges = () => (
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-      <Box className="status-badge">
-        <StatusIcon sx={{ fontSize: 16 }} />
-        {currentTicket.status.replace('_', ' ')}
-      </Box>
-      {currentTicket.status === 'pr_created' && (
+      {currentTicket.status === 'pr_created' ? (
         <Tooltip title="Pull Request Created">
-          <Box className="status-badge" sx={{ bgcolor: '#2e7d3215', color: '#2e7d32', borderColor: '#2e7d3240' }}>
+          <Box className="status-badge" sx={{ bgcolor: '#7b1fa215', color: '#7b1fa2', borderColor: '#7b1fa240' }}>
             <GitHubIcon sx={{ fontSize: 16 }} />
             PR Created
           </Box>
         </Tooltip>
+      ) : (
+        <Box className="status-badge">
+          <StatusIcon sx={{ fontSize: 16 }} />
+          {currentTicket.status.replace('_', ' ')}
+        </Box>
       )}
     </Box>
   );
@@ -695,7 +696,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
         width: '100%',
         pr: 2
       }}>
-        {currentTicket.status === 'pr_created' ? (
+        {currentTicket.status === 'pr_created' && currentTicket.prUrl ? (
           <Button
             variant="contained"
             onClick={handleOpenPR}
