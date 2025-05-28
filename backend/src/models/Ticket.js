@@ -36,8 +36,12 @@ const TicketSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['new', 'in_progress', 'completed', 'failed'],
+        enum: ['new', 'in_progress', 'completed', 'failed', 'pr_created'],
         default: 'new'
+    },
+    prUrl: {
+        type: String,
+        default: null
     },
     generatedCode: {
         type: String,

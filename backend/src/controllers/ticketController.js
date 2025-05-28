@@ -39,6 +39,30 @@ function extractCodeAndReasoningLoosely(rawText) {
   return { code, reasoning };
 }
 
+function extractPRUrlLoosely(rawText) {
+  // Clean up: remove any "Goose Response:" prefixes and extra whitespace
+  const cleanedText = rawText
+    .split('\n')
+    .filter(line => !line.startsWith('Goose Response:'))
+    .join('\n')
+    .trim();
+
+  // Extract JSON object containing pr_url or error
+  const jsonMatch = cleanedText.match(/\{[\s\S]*"pr_url"[\s\S]*\}|\{[\s\S]*"error"[\s\S]*\}/);
+  
+  if (!jsonMatch) {
+    console.error('Failed to match JSON pattern. Text received:', cleanedText);
+    throw new Error("Could not extract PR URL or error from response");
+  }
+
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (error) {
+    console.error('Failed to parse JSON:', jsonMatch[0]);
+    throw new Error("Invalid JSON in response");
+  }
+}
+
 async function handleApproveAndApply(ticketId) {
   try {
     // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
@@ -57,15 +81,6 @@ async function handleApproveAndApply(ticketId) {
           task: "Perform the following version control operations:",
           intent: ticket.intent
         },
-
-        // context: `Assuming we're on feature/6835232b5d666395ae1c79f5 branch, if not switch to it. Stage changes with "git add .", commit changes using "git commit -m "${ticket.intent}" as the message, and push using "git push -u origin feature/6835232b5d666395ae1c79f5".
-        // After that, perform the following GitHub operations strictly in the order given via CLI commands:
-        // - gh pr create --repo refractoai/incidents-app --base main --head feature/6835232b5d666395ae1c79f5 --title ${ticket.intent} --body "{Whatever work was done}" --assignee "@me"
-        // - gh pr view feature/6835232b5d666395ae1c79f5 --json url --jq '.url'
-        // After running these commands, respond with the pull request URL in the following JSON format:
-        // {
-        //   "pr_url": "{HTTPS GitHub Pull Request URL}"
-        // }`
         context: `Assuming we're on feature/${ticketId} branch, if not switch to it. Stage changes with "git add .", commit changes using "git commit -m "${ticket.title}" as the message, and push using "git push -u origin feature/${ticketId}".
         After that, perform the following GitHub operations strictly in the order given via CLI commands:
         - gh pr create --repo refractoai/incidents-app --base main --head feature/${ticketId} --title ${ticket.intent} --body "{Whatever work was done}" --assignee "@me"
@@ -80,17 +95,6 @@ async function handleApproveAndApply(ticketId) {
           "error": "<Error message here>"
         }
         `
-//           context: ` GitHub User - (refractoai) is already authenticated via Personal Access Token (PAT) with full access to the repository.
-// 1. Push the branch to the remote ${ticket.githubUrl}.
-// 2. Open a pull request against main:
-// - Title: same as the commit message.
-// - Description: list each changed file and explain the purpose of changes, plus note how to run any new tests.
-// - Add inline comments summarizing the core logic updates.
-// Output each Git command you would run, then the PR payload or CLI command you'd use to create the pull request.
-// Respond **EXACTLY** in the following JSON format (no extra text before or after) after c:
-//   {
-//     "pr_url": "{HTTPS GitHub Pull Request URL}",
-//   }`
       })
     })
 
@@ -98,6 +102,23 @@ async function handleApproveAndApply(ticketId) {
 
     console.log('Goose Response:', codeResponse);
     console.log('Goose Approve and Apply Response:', codeResponse.response);
+
+    // Extract and parse the JSON response
+    const responseData = extractPRUrlLoosely(codeResponse.response);
+    
+    if (responseData.error) {
+      throw new Error(responseData.error);
+    }
+
+    // Update ticket with PR URL and status
+    await Ticket.findByIdAndUpdate(ticketId, {
+      status: 'pr_created',
+      prUrl: responseData.pr_url,
+      agentReasoning: {
+        ...ticket.agentReasoning,
+        timestamp: new Date().toISOString()
+      }
+    });
 
 } catch (error) {
     console.error('Git Approve and Apply operation failed:', error);

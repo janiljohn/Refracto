@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade, Snackbar, Alert } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon, ContentCopy as CopyIcon, Check as CheckIcon, Stop as StopIcon } from '@mui/icons-material';
+import { Box, Typography, Paper, Button, IconButton, CircularProgress, Modal, Fade, Snackbar, Alert, Tooltip } from '@mui/material';
+import { Edit as EditIcon, Delete as DeleteIcon, FiberManualRecord as StatusIcon, Save as SaveIcon, Cancel as CancelIcon, Terminal as TerminalIcon, ContentCopy as CopyIcon, Check as CheckIcon, Stop as StopIcon, GitHub as GitHubIcon } from '@mui/icons-material';
 import { getStatusColor } from '../utils/statusUtils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -98,6 +98,8 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
   const resizeTimeoutRef = useRef(null);
   const [copyFeedback, setCopyFeedback] = useState({ open: false, message: '' });
   const [copyState, setCopyState] = useState({ code: false, test: false });
+  const [isApproving, setIsApproving] = useState(false);
+  const [approveError, setApproveError] = useState(null);
 
   useEffect(() => {
     setCurrentTicket(ticket);
@@ -112,7 +114,8 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
 
   const handleApproveAndApply = async () => {
     try {
-      setIsRefining(true);
+      setIsApproving(true);
+      setApproveError(null);
       const updatedTicket = await approveTicket(currentTicket._id);
       setCurrentTicket(updatedTicket);
       if (onStatusChange) {
@@ -120,17 +123,16 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
       }
     } catch (error) {
       console.error('Error approving and applying:', error);
-      // Show error notification
+      setApproveError(error.message || 'Failed to approve and apply changes');
       setCopyFeedback({
         open: true,
-        message: 'Failed to approve and apply changes. Please try again.',
+        message: error.message || 'Failed to approve and apply changes',
         severity: 'error'
       });
     } finally {
-      setIsRefining(false);
+      setIsApproving(false);
     }
   };
-  
 
   const handleRefinementComplete = async () => {
     try {
@@ -229,6 +231,12 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
           severity: 'error'
         });
       }
+    }
+  };
+
+  const handleOpenPR = () => {
+    if (currentTicket.prUrl) {
+      window.open(currentTicket.prUrl, '_blank');
     }
   };
 
@@ -527,6 +535,23 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
     </Paper>
   );
 
+  const renderStatusBadges = () => (
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+      <Box className="status-badge">
+        <StatusIcon sx={{ fontSize: 16 }} />
+        {currentTicket.status.replace('_', ' ')}
+      </Box>
+      {currentTicket.status === 'pr_created' && (
+        <Tooltip title="Pull Request Created">
+          <Box className="status-badge" sx={{ bgcolor: '#2e7d3215', color: '#2e7d32', borderColor: '#2e7d3240' }}>
+            <GitHubIcon sx={{ fontSize: 16 }} />
+            PR Created
+          </Box>
+        </Tooltip>
+      )}
+    </Box>
+  );
+
   const renderContent = () => (
     <Box sx={{ 
       display: 'flex', 
@@ -557,10 +582,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
           border: `1px solid ${getStatusColor(currentTicket.status)}40`,
         }
       }}>
-        <Box className="status-badge">
-          <StatusIcon sx={{ fontSize: 16 }} />
-          {currentTicket.status.replace('_', ' ')}
-        </Box>
+        {renderStatusBadges()}
         <Box sx={{ display: 'flex', gap: 1 }}>
           {(currentTicket.status === 'pending' || currentTicket.status === 'in_progress') && (
             <Button
@@ -569,6 +591,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
               color="error"
               variant="outlined"
               onClick={handleTerminate}
+              disabled={isApproving}
             >
               Terminate
             </Button>
@@ -578,6 +601,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
             size="small"
             variant="outlined"
             onClick={() => onEdit && onEdit(ticket)}
+            disabled={isApproving}
           >
             Edit Description
           </Button>
@@ -587,6 +611,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
             color="error"
             variant="outlined"
             onClick={() => onDelete && onDelete(ticket)}
+            disabled={isApproving}
           >
             Delete Ticket
           </Button>
@@ -670,49 +695,75 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
         width: '100%',
         pr: 2
       }}>
-        <Button
-          variant="contained"
-          onClick={handleApproveAndApply}
-          disabled={isRefining}
-          sx={{
-            borderRadius: 2,
-            textTransform: 'none',
-            px: 2,
-            minWidth: '48px',
-            width: '48px',
-            transition: 'all 0.3s ease',
-            bgcolor: '#b0b0b0',
-            color: '#fff',
-            '&:hover': { 
-              bgcolor: '#9e9e9e',
-              width: '220px',
-              '& .button-text': {
-                opacity: 1,
-                width: 'auto',
-                ml: 1
+        {currentTicket.status === 'pr_created' ? (
+          <Button
+            variant="contained"
+            onClick={handleOpenPR}
+            startIcon={<GitHubIcon />}
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 2,
+              bgcolor: '#2e7d32',
+              color: '#fff',
+              '&:hover': { 
+                bgcolor: '#1b5e20'
               }
-            },
-            '&.Mui-disabled': {
-              bgcolor: 'rgba(176,176,176,0.5)',
-              color: 'rgba(255,255,255,0.7)'
-            }
-          }}
-        >
-          {isRefining ? <CircularProgress size={20} color="inherit" /> : <GithubIcon />}
-          <Typography 
-            className="button-text"
-            sx={{ 
-              opacity: 0,
-              width: 0,
-              overflow: 'hidden',
-              whiteSpace: 'nowrap',
-              transition: 'all 0.3s ease',
-              fontSize: '0.9rem'
             }}
           >
-            Approve & Apply
-          </Typography>
-        </Button>
+            View Pull Request
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            onClick={handleApproveAndApply}
+            disabled={isApproving || currentTicket.status === 'failed'}
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 2,
+              minWidth: '48px',
+              width: '48px',
+              transition: 'all 0.3s ease',
+              bgcolor: '#b0b0b0',
+              color: '#fff',
+              '&:hover': { 
+                bgcolor: '#9e9e9e',
+                width: '220px',
+                '& .button-text': {
+                  opacity: 1,
+                  width: 'auto',
+                  ml: 1
+                }
+              },
+              '&.Mui-disabled': {
+                bgcolor: 'rgba(176,176,176,0.5)',
+                color: 'rgba(255,255,255,0.7)'
+              }
+            }}
+          >
+            {isApproving ? (
+              <CircularProgress size={20} color="inherit" />
+            ) : (
+              <>
+                <GithubIcon />
+                <Typography 
+                  className="button-text"
+                  sx={{ 
+                    opacity: 0,
+                    width: 0,
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.3s ease',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  Approve & Apply
+                </Typography>
+              </>
+            )}
+          </Button>
+        )}
 
         {currentTicket.agentReasoning && (
           <Button
