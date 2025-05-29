@@ -398,8 +398,15 @@ async function refineCode(ticketId, prompt) {
     console.log('Ticket Controller: Received goose service response:', {
       hasQuestions: !!data.questions,
       hasCode: !!data.code,
-      hasTests: !!data.tests
+      hasTests: !!data.tests,
+      hasError: !!data.error
     });
+
+    // Handle errors from goose service
+    if (data.error) {
+      console.error('Ticket Controller: Goose service error:', data.error);
+      throw new Error(`Goose service error: ${data.error}`);
+    }
 
     // Handle AI response
     if (data.questions) {
@@ -419,8 +426,22 @@ async function refineCode(ticketId, prompt) {
 
     // Handle code refinement
     console.log('Ticket Controller: Processing code refinement');
-    const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(data.code);
-    const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(data.tests);
+    if (!data.code || !data.tests) {
+      throw new Error('Missing code or tests in response');
+    }
+
+    let parsedCode, parsedTests;
+    try {
+      parsedCode = JSON.parse(data.code);
+      parsedTests = JSON.parse(data.tests);
+    } catch (e) {
+      console.error('Ticket Controller: Failed to parse code or tests:', e);
+      throw new Error('Invalid JSON in code or tests response');
+    }
+
+    if (!parsedCode.code || !parsedCode.reasoning || !parsedTests.code || !parsedTests.reasoning) {
+      throw new Error('Missing code or reasoning in parsed response');
+    }
 
     console.log('Ticket Controller: Updating ticket with refined code');
     // Update ticket with AI response and code changes
@@ -428,7 +449,7 @@ async function refineCode(ticketId, prompt) {
       $push: {
         chatHistory: {
           role: 'ai',
-          content: codeReasoning,
+          content: parsedCode.reasoning,
           type: 'confirmation',
           timestamp: new Date()
         }
@@ -437,11 +458,11 @@ async function refineCode(ticketId, prompt) {
 
     // Update code and tests in a separate operation
     await Ticket.findByIdAndUpdate(ticketId, {
-      generatedCode,
-      testCases: generatedTests,
+      generatedCode: parsedCode.code,
+      testCases: parsedTests.code,
       agentReasoning: {
-        codeGeneration: codeReasoning,
-        testGeneration: testReasoning,
+        codeGeneration: parsedCode.reasoning,
+        testGeneration: parsedTests.reasoning,
         timestamp: new Date().toISOString()
       }
     });

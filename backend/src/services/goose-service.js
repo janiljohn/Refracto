@@ -278,19 +278,58 @@ Do not include any extra text outside the JSON.`;
             response: initResponse?.substring(0, 100) + '...'
         });
 
-        // Try to extract valid JSON from the response
-        let parsedInit;
-        try {
-            const jsonMatch = initResponse.match(/\{[\s\S]*\}/);
-            parsedInit = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-            console.log('Goose Service: Parsed initial response:', {
-                hasQuestions: !!parsedInit?.questions,
-                hasConfirm: parsedInit?.confirm === 'yes'
+        // Extract JSON from response
+        const extractJson = (text) => {
+            // First try to find any JSON-like structure
+            const jsonMatches = text.match(/\{[\s\S]*?\}/g);
+            if (!jsonMatches) return null;
+
+            // Try each potential JSON match
+            for (const match of jsonMatches) {
+                try {
+                    const parsed = JSON.parse(match);
+                    // Validate that this is a complete JSON object (not a partial match)
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        // Check if this is one of our expected response formats
+                        if (parsed.questions || parsed.confirm || 
+                            (parsed.code && parsed.reasoning)) {
+                            console.log('Goose Service: Successfully extracted JSON:', {
+                                type: parsed.questions ? 'questions' : 
+                                      parsed.confirm ? 'confirm' : 'code',
+                                length: match.length
+                            });
+                            return parsed;
+                        }
+                    }
+                } catch (e) {
+                    // Continue to next match if this one fails
+                    continue;
+                }
+            }
+
+            // If we get here, no valid JSON was found
+            console.error('Goose Service: No valid JSON found in text:', {
+                textLength: text.length,
+                firstChars: text.substring(0, 100),
+                lastChars: text.substring(text.length - 100)
             });
-        } catch (e) {
-            console.error('Goose Service: Failed to parse initial response:', e);
-            return res.status(400).json({ error: "Invalid JSON in AI response", raw: initResponse });
+            return null;
+        };
+
+        // Try to extract valid JSON from the response
+        const parsedInit = extractJson(initResponse);
+        if (!parsedInit) {
+            console.error('Goose Service: No valid JSON found in initial response');
+            return res.status(400).json({ 
+                error: "No valid JSON found in response", 
+                raw: initResponse
+            });
         }
+
+        console.log('Goose Service: Parsed initial response:', {
+            hasQuestions: !!parsedInit?.questions,
+            hasConfirm: parsedInit?.confirm === 'yes'
+        });
 
         // Branch logic
         if (parsedInit?.questions) {
@@ -306,18 +345,18 @@ Do not include any extra text outside the JSON.`;
             console.error('Goose Service: Invalid confirmation response:', parsedInit);
             return res.status(400).json({
                 error: "Expected 'confirm': 'yes' to proceed, or 'questions' array to clarify",
-                raw: initResponse
+                raw: initResponse,
+                parsed: parsedInit
             });
         }
 
         console.log('Goose Service: Proceeding with code refinement');
-        const context = `If you have no questions, please respond ONLY in the following JSON format:
+        const context = `Please respond ONLY in the following JSON format:
 {
   "code": "<complete code block as a java code markdown>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
-Do not include any extra text outside the JSON.
-`;
+Do not include any extra text outside the JSON.`;
 
         const fullPrompt = `${context}\n\nRefine the following code based on this request: ${prompt}`;
         console.log('Goose Service: Sending code refinement prompt to AI');
@@ -326,6 +365,17 @@ Do not include any extra text outside the JSON.
             responseLength: response?.length,
             response: response?.substring(0, 100) + '...'
         });
+
+        // Extract and validate code response
+        const parsedCode = extractJson(response);
+        if (!parsedCode || !parsedCode.code || !parsedCode.reasoning) {
+            console.error('Goose Service: Invalid code response:', parsedCode);
+            return res.status(400).json({ 
+                error: "Invalid or incomplete code response", 
+                raw: response,
+                parsed: parsedCode
+            });
+        }
         
         // Generate test cases
         console.log('Goose Service: Generating test cases');
@@ -334,8 +384,7 @@ Do not include any extra text outside the JSON.
   "code": "<complete test code block as a java code markdown>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
-Do not include any extra text outside the JSON.
-`;
+Do not include any extra text outside the JSON.`;
 
         const testPrompt = `${testContext}\n\nGenerate test cases for the refined code: ${prompt}`;
         const testResponse = await executeGooseCommand(session, testPrompt);
@@ -344,10 +393,21 @@ Do not include any extra text outside the JSON.
             response: testResponse?.substring(0, 100) + '...'
         });
 
+        // Extract and validate test response
+        const parsedTests = extractJson(testResponse);
+        if (!parsedTests || !parsedTests.code || !parsedTests.reasoning) {
+            console.error('Goose Service: Invalid test response:', parsedTests);
+            return res.status(400).json({ 
+                error: "Invalid or incomplete test response", 
+                raw: testResponse,
+                parsed: parsedTests
+            });
+        }
+
         console.log('Goose Service: Sending final response to client');
         res.json({ 
-            code: response,
-            tests: testResponse,
+            code: JSON.stringify(parsedCode),
+            tests: JSON.stringify(parsedTests),
             sessionId: session.id,
             history: session.history
         });
