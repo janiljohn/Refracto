@@ -65,15 +65,50 @@ function extractPRUrlLoosely(rawText) {
 
 async function handleApproveAndApply(ticketId) {
   try {
-    // // await Ticket.findByIdAndUpdate(ticketId, { status: 'in_progress' });
     const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      throw new Error('Ticket not found');
+    }
+
+    // Format the agent reasoning for PR description
+    const formatReasoning = (reasoning) => {
+      if (!reasoning) return '';
+      let formatted = '';
+      
+      if (reasoning.codeGeneration) {
+        formatted += '## Code Generation\n\n';
+        formatted += reasoning.codeGeneration + '\n\n';
+      }
+      
+      if (reasoning.testGeneration) {
+        formatted += '## Test Generation\n\n';
+        formatted += reasoning.testGeneration + '\n\n';
+      }
+      
+      if (reasoning.error) {
+        formatted += '## Errors\n\n';
+        formatted += reasoning.error + '\n\n';
+      }
+      
+      return formatted;
+    };
+
+    const prDescription = `# ${ticket.title}
+
+## Intent
+${ticket.intent}
+
+## Agent Reasoning
+${formatReasoning(ticket.agentReasoning)}
+
+## Additional Notes
+${ticket.notes || 'No additional notes'}`;
 
     // Generate code using goose service
     const response = await fetch(`${GOOSE_SERVICE_URL}/approve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Add any additional headers if needed
       },
       body: JSON.stringify({
         sessionId: ticketId,
@@ -83,7 +118,7 @@ async function handleApproveAndApply(ticketId) {
         },
         context: `Assuming we're on feature/${ticketId} branch, if not switch to it. Stage changes with "git add .", commit changes using "git commit -m "${ticket.title}" as the message, and push using "git push -u origin feature/${ticketId}".
         After that, perform the following GitHub operations strictly in the order given via CLI commands:
-        - gh pr create --repo refractoai/incidents-app --base main --head feature/${ticketId} --title ${ticket.intent} --body "{Whatever work was done}" --assignee "@me"
+        - gh pr create --repo refractoai/incidents-app --base main --head feature/${ticketId} --title "${ticket.title}" --body "${prDescription}" --assignee "@me"
         - gh pr view feature/${ticketId} --json url --jq '.url'
         After running these commands, respond with the pull request URL in the following JSON format:
         {
@@ -96,10 +131,9 @@ async function handleApproveAndApply(ticketId) {
         }
         `
       })
-    })
+    });
 
     const codeResponse = await response.json();
-
     console.log('Goose Response:', codeResponse);
     console.log('Goose Approve and Apply Response:', codeResponse.response);
 
@@ -120,7 +154,7 @@ async function handleApproveAndApply(ticketId) {
       }
     });
 
-} catch (error) {
+  } catch (error) {
     console.error('Git Approve and Apply operation failed:', error);
     await Ticket.findByIdAndUpdate(ticketId, { 
       status: 'failed',
@@ -201,8 +235,8 @@ async function generateCode(ticketId) {
           rules: ticket.rules,
           output: ticket.output
         },
-        context: `Respond **EXACTLY** in the following JSON format (no extra text before or after):
-
+        context: `Always refer to the global goose hints and derive context from them as the first step.
+        Respond EXACTLY in the following JSON format (no extra text before or after):
 {
   "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
   "reasoning": "<concise narrative explanation in plain text, using this structure:
@@ -258,8 +292,8 @@ Important NOTE: After producing the JSON response, WRITE the generated code into
         prompt: {
           task: "Generate test cases for the generated SAP CAP Java code. "
         },
-        context: `Please respond **ONLY** in the following JSON format (no extra text before or after):
-
+        context: `Always refer to the global goose hints and derive context from them as the first step.
+        Respond EXACTLY in the following JSON format (no extra text before or after):
 {
   "code": "<complete, runnable code block exactly as it should appear in the file(s) you created or modified>",
   "reasoning": "<concise narrative explanation in plain text, using this structure:
