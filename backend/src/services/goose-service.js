@@ -280,40 +280,43 @@ Do not include any extra text outside the JSON.`;
 
         // Extract JSON from response
         const extractJson = (text) => {
-            // First try to find any JSON-like structure
-            const jsonMatches = text.match(/\{[\s\S]*?\}/g);
-            if (!jsonMatches) return null;
+            // Clean up: remove any "Goose Response:" prefixes and extra whitespace
+            const cleanedText = text
+                .split('\n')
+                .filter(line => !line.startsWith('Goose Response:'))
+                .join('\n')
+                .trim();
 
-            // Try each potential JSON match
-            for (const match of jsonMatches) {
-                try {
-                    const parsed = JSON.parse(match);
-                    // Validate that this is a complete JSON object (not a partial match)
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        // Check if this is one of our expected response formats
-                        if (parsed.questions || parsed.confirm || 
-                            (parsed.code && parsed.reasoning)) {
-                            console.log('Goose Service: Successfully extracted JSON:', {
-                                type: parsed.questions ? 'questions' : 
-                                      parsed.confirm ? 'confirm' : 'code',
-                                length: match.length
-                            });
-                            return parsed;
-                        }
-                    }
-                } catch (e) {
-                    // Continue to next match if this one fails
-                    continue;
-                }
+            // Extract JSON object using regex
+            const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.error('Goose Service: No JSON object found in text:', {
+                    textLength: cleanedText.length,
+                    firstChars: cleanedText.substring(0, 100)
+                });
+                return null;
             }
 
-            // If we get here, no valid JSON was found
-            console.error('Goose Service: No valid JSON found in text:', {
-                textLength: text.length,
-                firstChars: text.substring(0, 100),
-                lastChars: text.substring(text.length - 100)
-            });
-            return null;
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                // Validate expected fields based on response type
+                if (parsed.questions || parsed.confirm || (parsed.code && parsed.reasoning)) {
+                    console.log('Goose Service: Successfully extracted JSON:', {
+                        type: parsed.questions ? 'questions' : 
+                              parsed.confirm ? 'confirm' : 'code',
+                        length: jsonMatch[0].length
+                    });
+                    return parsed;
+                }
+                console.error('Goose Service: JSON missing expected fields:', parsed);
+                return null;
+            } catch (e) {
+                console.error('Goose Service: JSON parse error:', {
+                    error: e.message,
+                    jsonText: jsonMatch[0].substring(0, 100) + '...'
+                });
+                return null;
+            }
         };
 
         // Try to extract valid JSON from the response
@@ -365,17 +368,6 @@ Do not include any extra text outside the JSON.`;
             responseLength: response?.length,
             response: response?.substring(0, 100) + '...'
         });
-
-        // Extract and validate code response
-        const parsedCode = extractJson(response);
-        if (!parsedCode || !parsedCode.code || !parsedCode.reasoning) {
-            console.error('Goose Service: Invalid code response:', parsedCode);
-            return res.status(400).json({ 
-                error: "Invalid or incomplete code response", 
-                raw: response,
-                parsed: parsedCode
-            });
-        }
         
         // Generate test cases
         console.log('Goose Service: Generating test cases');
@@ -393,21 +385,10 @@ Do not include any extra text outside the JSON.`;
             response: testResponse?.substring(0, 100) + '...'
         });
 
-        // Extract and validate test response
-        const parsedTests = extractJson(testResponse);
-        if (!parsedTests || !parsedTests.code || !parsedTests.reasoning) {
-            console.error('Goose Service: Invalid test response:', parsedTests);
-            return res.status(400).json({ 
-                error: "Invalid or incomplete test response", 
-                raw: testResponse,
-                parsed: parsedTests
-            });
-        }
-
         console.log('Goose Service: Sending final response to client');
         res.json({ 
-            code: JSON.stringify(parsedCode),
-            tests: JSON.stringify(parsedTests),
+            code: response,
+            tests: testResponse,
             sessionId: session.id,
             history: session.history
         });
