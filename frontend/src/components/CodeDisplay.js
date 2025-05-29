@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MonacoEditor from '@monaco-editor/react';
 import ChatPrompt from './ChatPrompt';
+import ChatHistory from './ChatHistory';
 import { approveTicket, terminateTicket } from '../utils/api';
 
 const GithubIcon = (props) => (
@@ -102,14 +103,14 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
   const [approveError, setApproveError] = useState(null);
 
   useEffect(() => {
+    console.log('CodeDisplay: Received new ticket prop:', {
+      id: ticket._id,
+      status: ticket.status,
+      chatHistoryLength: ticket.chatHistory?.length
+    });
     setCurrentTicket(ticket);
     setCodeEdit(ticket.generatedCode || codeSample);
     setTestEdit(ticket.testCases || testSample);
-    console.log('Ticket data:', {
-      status: ticket.status,
-      hasReasoning: !!ticket.agentReasoning,
-      reasoning: ticket.agentReasoning
-    });
   }, [ticket]);
 
   const handleApproveAndApply = async () => {
@@ -134,17 +135,39 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
     }
   };
 
-  const handleRefinementComplete = async () => {
+  const handleRefinementComplete = async (updatedTicket) => {
+    console.log('CodeDisplay: handleRefinementComplete called with:', {
+      hasTicket: !!updatedTicket,
+      ticketId: updatedTicket?._id,
+      status: updatedTicket?.status,
+      chatHistoryLength: updatedTicket?.chatHistory?.length
+    });
+
     try {
-      const response = await fetch(`/api/tickets/${currentTicket._id}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
-      const updatedTicket = await response.json();
-      setCurrentTicket(updatedTicket);
-      setCodeEdit(updatedTicket.generatedCode || codeSample);
-      setTestEdit(updatedTicket.testCases || testSample);
+      if (updatedTicket) {
+        // Use the provided ticket data
+        console.log('CodeDisplay: Updating state with provided ticket data');
+        setCurrentTicket(updatedTicket);
+        setCodeEdit(updatedTicket.generatedCode || codeSample);
+        setTestEdit(updatedTicket.testCases || testSample);
+      } else {
+        // Fallback to fetching if no ticket data provided
+        console.log('CodeDisplay: No ticket data provided, fetching from server');
+        const response = await fetch(`/api/tickets/${currentTicket._id}`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const fetchedTicket = await response.json();
+        console.log('CodeDisplay: Fetched ticket data:', {
+          id: fetchedTicket._id,
+          status: fetchedTicket.status,
+          chatHistoryLength: fetchedTicket.chatHistory?.length
+        });
+        setCurrentTicket(fetchedTicket);
+        setCodeEdit(fetchedTicket.generatedCode || codeSample);
+        setTestEdit(fetchedTicket.testCases || testSample);
+      }
     } catch (error) {
-      console.error('Error refreshing ticket:', error);
+      console.error('CodeDisplay: Error in handleRefinementComplete:', error);
     } finally {
       setIsRefining(false);
     }
@@ -664,7 +687,7 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
         </Box>
       </Box>
       
-      {/* Chat Prompt */}
+      {/* Chat History and Prompt */}
       <Box sx={{ 
         position: 'fixed',
         bottom: 0,
@@ -677,7 +700,15 @@ const CodeDisplay = ({ ticket, onDelete, onUpdate, onEdit, onStatusChange }) => 
         zIndex: 1000,
         boxShadow: '0px -2px 4px rgba(0,0,0,0.05)'
       }}>
-        <Box sx={{ maxWidth: '1800px', mx: 'auto', px: 3 }}>
+        <Box sx={{ 
+          maxWidth: '1800px', 
+          mx: 'auto', 
+          px: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2
+        }}>
+          <ChatHistory messages={currentTicket.chatHistory || []} />
           <ChatPrompt 
             key={currentTicket._id}
             ticketId={currentTicket._id}

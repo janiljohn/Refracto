@@ -23,16 +23,20 @@ export const deleteTicket = async (id) => {
 };
 
 export const refineTicket = async (id, prompt) => {
+  console.log('API: Sending refine request with prompt:', prompt);
   const res = await fetch(`${API_BASE}/tickets/${id}/refine`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: prompt
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
   });
   if (!res.ok) {
     const error = await res.json();
+    console.error('API: Refine request failed:', error);
     throw new Error(error.error || 'Failed to refine code');
   }
-  return res.json();
+  const data = await res.json();
+  console.log('API: Received refine response:', data);
+  return data;
 };
 
 export const approveTicket = async (id) => {

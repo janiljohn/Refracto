@@ -56,7 +56,27 @@ const TicketSchema = new mongoose.Schema({
         testGeneration: String,
         error: String,
         timestamp: Date
-    }
+    },
+    chatHistory: [{
+        role: {
+            type: String,
+            enum: ['user', 'ai'],
+            required: true
+        },
+        content: {
+            type: String,
+            required: true
+        },
+        type: {
+            type: String,
+            enum: ['message', 'question', 'confirmation'],
+            default: 'message'
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        }
+    }]
 }, {
     timestamps: true
 });

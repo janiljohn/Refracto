@@ -217,14 +217,14 @@ app.post('/generate', async (req, res) => {
     // Only include non-empty fields
     const approval = "Consider that you have full access to codebase and dont need to ask for ANY APPROVAL WHATSOVER"
     const task = prompt.task != '' ? `${prompt.task}` : '';
-    const requirements = prompt.intent != '' ? `Requirement we want to implement: ${prompt.intent}` : '';
-    const trigger = prompt.trigger != '' ? `Trigger conditions to enforce: ${prompt.trigger}` : '';
-    const rules = prompt.rules != '' ? `Constraints to enforce : ${prompt.rules}` : '';
-    const output = prompt.output != '' ? `Desired Output should look like: ${prompt.output}` : '';
-    const notes = prompt.notes != '' ? `Additional notes to be considered: ${prompt.notes}` : '';
+    const requirements = prompt.intent && prompt.intent != '' ? `Requirement we want to implement: ${prompt.intent}` : '';
+    const trigger = prompt.trigger && prompt.trigger != '' ? `Trigger conditions to enforce: ${prompt.trigger}` : '';
+    const rules = prompt.rules && prompt.rules != '' ? `Constraints to enforce : ${prompt.rules}` : '';
+    const output = prompt.output && prompt.output != '' ? `Desired Output should look like: ${prompt.output}` : '';
+    const notes = prompt.notes && prompt.notes != '' ? `Additional notes to be considered: ${prompt.notes}` : '';
     const cds = prompt.cds && prompt.cds.entities != [] ? `CDS entities that may be involved: ${prompt.cds.entities.join(", ")}` : '';
 
-    const fullPrompt = [context, task, requirements, cds, trigger, rules, notes, output]
+    const fullPrompt = [approval, context, task, requirements, cds, trigger, rules, notes, output]
         .filter(Boolean)  // Remove empty strings
         .join(' ');
 
@@ -247,30 +247,104 @@ app.post('/generate', async (req, res) => {
 
 app.post('/refine', async (req, res) => {
     const { sessionId, prompt } = req.body;
+    console.log('Goose Service: Received refine request:', {
+        sessionId,
+        promptLength: prompt?.length,
+        prompt: prompt?.substring(0, 100) + '...'
+    });
     
     try {
         const session = await getOrCreateSession(sessionId);
-        const context = `Please respond ONLY in the following JSON format:
+        console.log('Goose Service: Session retrieved:', {
+            sessionId: session.sessionId,
+            historyLength: session.history?.length
+        });
+
+        const approval = `If you have any questions, please ask them in the following JSON format:
+{
+  "questions": "<list of questions>"
+}
+If you have no questions, please respond ONLY in the following JSON format:
+{
+    "confirm": "yes"
+}
+Do not include any extra text outside the JSON.`;
+
+        const initPrompt = `I want to make a refinement to the previously generated code based on this request: ${prompt}\n\n${approval}`;
+        console.log('Goose Service: Sending initial prompt to AI');
+        const initResponse = await executeGooseCommand(session, initPrompt);
+        console.log('Goose Service: Received initial AI response:', {
+            responseLength: initResponse?.length,
+            response: initResponse?.substring(0, 100) + '...'
+        });
+
+        // Try to extract valid JSON from the response
+        let parsedInit;
+        try {
+            const jsonMatch = initResponse.match(/\{[\s\S]*\}/);
+            parsedInit = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+            console.log('Goose Service: Parsed initial response:', {
+                hasQuestions: !!parsedInit?.questions,
+                hasConfirm: parsedInit?.confirm === 'yes'
+            });
+        } catch (e) {
+            console.error('Goose Service: Failed to parse initial response:', e);
+            return res.status(400).json({ error: "Invalid JSON in AI response", raw: initResponse });
+        }
+
+        // Branch logic
+        if (parsedInit?.questions) {
+            console.log('Goose Service: Returning questions to user');
+            return res.json({
+                sessionId: session.id,
+                questions: parsedInit.questions,
+                history: session.history
+            });
+        }
+
+        if (parsedInit?.confirm !== 'yes') {
+            console.error('Goose Service: Invalid confirmation response:', parsedInit);
+            return res.status(400).json({
+                error: "Expected 'confirm': 'yes' to proceed, or 'questions' array to clarify",
+                raw: initResponse
+            });
+        }
+
+        console.log('Goose Service: Proceeding with code refinement');
+        const context = `If you have no questions, please respond ONLY in the following JSON format:
 {
   "code": "<complete code block as a java code markdown>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
-Do not include any extra text outside the JSON.`;
+Do not include any extra text outside the JSON.
+`;
 
         const fullPrompt = `${context}\n\nRefine the following code based on this request: ${prompt}`;
+        console.log('Goose Service: Sending code refinement prompt to AI');
         const response = await executeGooseCommand(session, fullPrompt);
+        console.log('Goose Service: Received code refinement response:', {
+            responseLength: response?.length,
+            response: response?.substring(0, 100) + '...'
+        });
         
         // Generate test cases
+        console.log('Goose Service: Generating test cases');
         const testContext = `Please respond ONLY in the following JSON format:
 {
   "code": "<complete test code block as a java code markdown>",
   "reasoning": "<clear explanation of how and why this code was implemented this way>"
 }
-Do not include any extra text outside the JSON.`;
+Do not include any extra text outside the JSON.
+`;
 
         const testPrompt = `${testContext}\n\nGenerate test cases for the refined code: ${prompt}`;
         const testResponse = await executeGooseCommand(session, testPrompt);
+        console.log('Goose Service: Received test cases response:', {
+            responseLength: testResponse?.length,
+            response: testResponse?.substring(0, 100) + '...'
+        });
 
+        console.log('Goose Service: Sending final response to client');
         res.json({ 
             code: response,
             tests: testResponse,
@@ -278,6 +352,7 @@ Do not include any extra text outside the JSON.`;
             history: session.history
         });
     } catch (error) {
+        console.error('Goose Service: Error in refine endpoint:', error);
         res.status(500).json({ error: error.message });
     }
 });

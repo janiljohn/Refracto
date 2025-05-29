@@ -234,7 +234,7 @@ Formatting rules for the **reasoning** field
 • Match the succinct style of this prompt—no tables, no long prose paragraphs.
 
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
-
+Consider that you have full access to codebase and dont need to ask for ANY APPROVAL WHATSOVER
 Important NOTE: After producing the JSON response, WRITE the generated code into the exact directories and filenames you listed under Files changed, creating any missing folders/files so the project is immediately runnable without manual copy-pasting.
 `
       })
@@ -289,7 +289,7 @@ Formatting rules for the **reasoning** field
 • Use the section headers exactly as shown: "Files read", "Files changed", each "<filename> – what & why", and "Net result".  
 • Under each header, use short dash bullets (-) for maximum clarity; keep each bullet to a single sentence.  
 • Match the succinct style of this prompt—no tables, no long prose paragraphs.
-
+Consider that you have full access to codebase and dont need to ask for ANY APPROVAL WHATSOVER
 Do **not** include any markdown fencing, backticks, or explanatory text outside the JSON object.
 Important NOTE: After producing the JSON response, WRITE the generated code into the exact directories and filenames you listed under Files changed, creating any missing folders/files so the project is immediately runnable without manual copy-pasting.
 `
@@ -329,7 +329,26 @@ Important NOTE: After producing the JSON response, WRITE the generated code into
 
 // Refine code with chat
 async function refineCode(ticketId, prompt) {
+  console.log('Ticket Controller: Starting refineCode:', {
+    ticketId,
+    promptLength: prompt?.length,
+    prompt: prompt?.substring(0, 100) + '...'
+  });
+
   try {
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      console.error('Ticket Controller: Ticket not found:', ticketId);
+      throw new Error('Ticket not found');
+    }
+
+    // Remove loading message first
+    console.log('Ticket Controller: Removing loading message');
+    await Ticket.findByIdAndUpdate(ticketId, {
+      $pull: { chatHistory: { type: 'loading' } }
+    });
+
+    console.log('Ticket Controller: Calling goose service for refinement');
     const response = await fetch(`${GOOSE_SERVICE_URL}/refine`, {
       method: 'POST',
       headers: {
@@ -342,10 +361,47 @@ async function refineCode(ticketId, prompt) {
     });
 
     const data = await response.json();
+    console.log('Ticket Controller: Received goose service response:', {
+      hasQuestions: !!data.questions,
+      hasCode: !!data.code,
+      hasTests: !!data.tests
+    });
+
+    // Handle AI response
+    if (data.questions) {
+      console.log('Ticket Controller: Handling questions from AI');
+      await Ticket.findByIdAndUpdate(ticketId, {
+        $push: {
+          chatHistory: {
+            role: 'ai',
+            content: data.questions,
+            type: 'question',
+            timestamp: new Date()
+          }
+        }
+      });
+      return { success: true, questions: data.questions };
+    }
+
+    // Handle code refinement
+    console.log('Ticket Controller: Processing code refinement');
     const { code: generatedCode, reasoning: codeReasoning } = extractCodeAndReasoningLoosely(data.code);
     const { code: generatedTests, reasoning: testReasoning } = extractCodeAndReasoningLoosely(data.tests);
 
-    // Update only code, tests and reasoning
+    console.log('Ticket Controller: Updating ticket with refined code');
+    // Update ticket with AI response and code changes
+    await Ticket.findByIdAndUpdate(ticketId, {
+      $push: {
+        chatHistory: {
+          role: 'ai',
+          content: codeReasoning,
+          type: 'confirmation',
+          timestamp: new Date()
+        }
+      }
+    });
+
+    // Update code and tests in a separate operation
     await Ticket.findByIdAndUpdate(ticketId, {
       generatedCode,
       testCases: generatedTests,
@@ -356,9 +412,21 @@ async function refineCode(ticketId, prompt) {
       }
     });
 
+    console.log('Ticket Controller: Refinement completed successfully');
     return { success: true, message: 'Code and tests refined successfully' };
   } catch (error) {
-    console.error('Code refinement failed:', error);
+    console.error('Ticket Controller: Error in refineCode:', error);
+    // Add error message to chat history
+    await Ticket.findByIdAndUpdate(ticketId, {
+      $push: {
+        chatHistory: {
+          role: 'ai',
+          content: `Error: ${error.message}`,
+          type: 'error',
+          timestamp: new Date()
+        }
+      }
+    });
     return { success: false, error: error.message };
   }
 }
@@ -433,15 +501,67 @@ ticketController = {
 
   // Refine code
   refineTicket: async (req, res) => {
+    console.log('Ticket Controller: Received refineTicket request:', {
+      ticketId: req.params.id,
+      promptLength: req.body.prompt?.length,
+      prompt: req.body.prompt?.substring(0, 100) + '...'
+    });
+
     try {
-      const prompt = req.body.toString();
-      const result = await refineCode(req.params.id, prompt);
-      if (result.success) {
-        res.json({ message: result.message });
-      } else {
-        res.status(400).json({ error: result.error });
+      const prompt = req.body.prompt;
+      if (!prompt) {
+        console.error('Ticket Controller: No prompt provided');
+        throw new Error('No message provided');
+      }
+
+      console.log('Ticket Controller: Adding user message and loading message');
+      // Add user message and loading message in a single update
+      const updatedTicket = await Ticket.findByIdAndUpdate(
+        req.params.id,
+        {
+          $push: {
+            chatHistory: [
+              {
+                role: 'user',
+                content: prompt,
+                type: 'message',
+                timestamp: new Date()
+              },
+              {
+                role: 'ai',
+                content: 'Thinking...',
+                type: 'loading',
+                timestamp: new Date()
+              }
+            ]
+          }
+        },
+        { new: true }  // Return the updated document
+      );
+
+      if (!updatedTicket) {
+        console.error('Ticket Controller: Ticket not found:', req.params.id);
+        throw new Error('Ticket not found');
+      }
+
+      console.log('Ticket Controller: Sending immediate response with updated ticket');
+      // Send immediate response with updated ticket
+      res.json({ ticket: updatedTicket });
+
+      // Continue with the refinement process in the background
+      console.log('Ticket Controller: Starting background refinement process');
+      try {
+        await refineCode(req.params.id, prompt);
+        console.log('Ticket Controller: Background refinement completed successfully');
+      } catch (error) {
+        console.error('Ticket Controller: Background refinement failed:', error);
+        // Ensure loading message is removed on error
+        await Ticket.findByIdAndUpdate(req.params.id, {
+          $pull: { chatHistory: { type: 'loading' } }
+        });
       }
     } catch (err) {
+      console.error('Ticket Controller: Error in refineTicket:', err);
       res.status(400).json({ error: err.message });
     }
   },
